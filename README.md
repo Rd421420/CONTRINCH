@@ -32,17 +32,36 @@ Aucune installation : ouvre simplement **`index.html`** dans un navigateur
 Le plan d'eau reproduit (de façon stylisée mais reconnaissable) la côte de
 **L'Estartit** sur la Costa Brava méditerranéenne :
 
-- **Massif du Montgrí / Cap de la Barra** au nord, qui avance vers le large ;
-- longue **plage de Pals** sablonneuse au sud (baie concave) ;
-- **archipel des Îles Medes** au large à l'est (Meda Gran, Meda Petita + cailloux) ;
-- profondeurs qui s'enfoncent vers le large, **échouement** sur la terre et les
-  hauts-fonds, toponymes et marqueur du port sur la carte ;
+Géographie calée sur les coordonnées réelles (origine = port de L'Estartit) :
+
+- **Massif du Montgrí**, **Cap de la Barra** et **Roca Foradada** au nord
+  (côte rocheuse découpée qui avance vers le large) ;
+- **port de L'Estartit** avec ses **digues** (jetée extérieure + contre-jetée
+  ménageant la passe) ;
+- longue **plage de Pals** au sud reculant vers la **Gola del Ter** (baie concave) ;
+- **archipel des Îles Medes** détaillé : Meda Gran (avec **phare** à éclats),
+  Meda Petita, Medellot, Carall Bernat, Tascó Gros/Petit ;
+- profondeurs qui s'enfoncent vers le large, **échouement** sur la terre, les
+  digues et les hauts-fonds ; toponymes et marqueur du port sur la carte ;
 - **silhouette de la côte** dessinée sur l'horizon dans la vue à bord ;
 - réglages par défaut **méditerranéens** : marée faible (~0,5 m), Tramontane
-  de secteur nord-ouest. Tous restent modifiables (n'importe quel vent / mer /
-  marée / météo via les curseurs et scénarios).
+  de secteur nord-ouest.
 
 Le bateau démarre à la sortie du port, cap au large, waypoint placé près des Medes.
+
+## Météo marine aléatoire & évolutive
+
+- **🎲 Météo marine aléatoire** : génère une situation **cohérente** tirée des
+  régimes typiques de la Costa Brava / golfe du Lion — **Tramuntana** (NNO,
+  forte et rafaleuse), **Garbí / marinada** (SO), **Llevant** (E, houle et
+  pluie), **Migjorn** (S), **Xaloc** (SE), calme anticyclonique, grain orageux
+  ou brouillard (boira). Vent, rafales, état de mer, météo et marée sont tirés
+  au sort dans des fourchettes réalistes et corrélés entre eux (avec un conseil
+  de ris si ça souffle).
+- **Météo évolutive** : une fois cochée, le temps **change en cours de
+  navigation** (le vent adonne/refuse et monte/descend, l'état de mer suit, la
+  météo bascule) en visant des « tendances » successives — comme une prévision
+  qui se déroule. Une annonce vocale signale chaque évolution si le son est actif.
 
 ## Plein écran
 

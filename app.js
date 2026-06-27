@@ -108,24 +108,40 @@ const S = {
    --------------------------------------------------------------------- */
 const REGION = { name: "L'Estartit — Îles Medes" };
 
+/* Positions calées depuis les coordonnées réelles (origine = port de L'Estartit,
+   42.0577°N 3.2033°E). 1° lat ≈ 111132 m ; 1° lon ≈ 82700 m à 42°N. */
+
 // Limite est de la terre ferme selon la latitude y (terre si x < coastX)
 function coastX(y) {
-  let cx = -90;
-  cx += 720 * Math.exp(-Math.pow((y - 1400) / 700, 2));   // cap rocheux du Montgrí au nord
-  cx -= 260 * Math.exp(-Math.pow((y + 1800) / 1500, 2));  // baie sableuse au sud
-  cx += 40 * Math.sin(y / 320);                            // découpes de la côte
+  let cx = -40;
+  cx += 760 * Math.exp(-Math.pow((y - 1100) / 650, 2));   // massif rocheux du Montgrí (large bombement)
+  cx += 180 * Math.exp(-Math.pow((y - 820) / 240, 2));    // Cap de la Barra (pointe plus marquée)
+  if (y < 0) cx += clamp(y * 0.10, -520, 0);              // longue plage qui recule vers le SO (baie de Pals)
+  cx += 22 * Math.sin(y / 260) * clamp(y / 600, 0, 1);    // calanques de la côte rocheuse (nord)
   return cx;
 }
-// Archipel des Medes (îles + cailloux) au large
+// Archipel des Medes (îles + cailloux), aligné NO–SE, phare sur Meda Gran
 const ISLANDS = [
-  { x: 1180, y: -120, r: 200, name: 'Meda Gran' },
-  { x: 1430, y: -340, r: 120, name: 'Meda Petita' },
-  { x: 1040, y: 130, r: 70 },
-  { x: 1330, y: 70, r: 55 },
-  { x: 1520, y: -160, r: 45 },
+  { x: 1560, y: -1090, r: 130, name: 'Meda Petita' },
+  { x: 1500, y: -1180, r: 45,  name: 'Medellot' },
+  { x: 1654, y: -1256, r: 230, name: 'Meda Gran', light: true },
+  { x: 1610, y: -1380, r: 35,  name: 'Carall Bernat' },
+  { x: 1760, y: -1430, r: 70,  name: 'Tascó Gros' },
+  { x: 1855, y: -1525, r: 50,  name: 'Tascó Petit' },
+];
+// Digues du port (segments de terre) ménageant une passe vers le SE
+const BREAKWATERS = [
+  { ax: -30, ay: -30, bx: 150, by: -130, w: 20 },   // digue extérieure
+  { ax: 70,  ay: 70,  bx: 130, by: 10,   w: 16 },   // contre-jetée
 ];
 const START = { x: 250, y: 0, heading: 90 };
 
+function segDist(px, py, ax, ay, bx, by) {
+  const dx = bx - ax, dy = by - ay, l2 = dx * dx + dy * dy;
+  let t = l2 ? ((px - ax) * dx + (py - ay) * dy) / l2 : 0;
+  t = clamp(t, 0, 1);
+  return Math.hypot(px - (ax + t * dx), py - (ay + t * dy));
+}
 function nearestLand(x, y) {
   let nd = x - coastX(y);            // >0 = en mer (à l'est de la côte)
   let onLand = nd < 0;
@@ -134,16 +150,23 @@ function nearestLand(x, y) {
     if (dd < 0) onLand = true;
     if (dd < nd) nd = dd;
   }
+  for (const bw of BREAKWATERS) {
+    const dd = segDist(x, y, bw.ax, bw.ay, bw.bx, bw.by) - bw.w;
+    if (dd < 0) onLand = true;
+    if (dd < nd) nd = dd;
+  }
   return { dist: nd, onLand };
 }
 function isLand(x, y) { return nearestLand(x, y).onLand; }
 
-function seabedDepth(x, y) {
-  const { dist, onLand } = nearestLand(x, y);
-  if (onLand) return -3;
+function depthFromDist(dist, x, y) {
   let d = 1.0 + Math.max(0, dist) * 0.045;                // la côte s'enfonce vers le large
   d += 1.5 * Math.sin(x / 600) * Math.cos(y / 700) * clamp(dist / 250, 0, 1); // relief sous-marin (au large)
   return clamp(d, 0.3, 48);
+}
+function seabedDepth(x, y) {
+  const nl = nearestLand(x, y);
+  return nl.onLand ? -3 : depthFromDist(nl.dist, x, y);
 }
 function tideHeight() { return (S.tideRange / 2) * (1 - Math.cos(2 * Math.PI * S.tidePhase)); }
 function tideCurrentBase() {
@@ -279,6 +302,7 @@ function step(dt) {
 
   // Modules dépendant du temps
   updateTutorial(dt);
+  Weather.tick(dt);
   Sound.update(aw.aws, Hs, depth);
 }
 
@@ -505,7 +529,7 @@ function drawChart(ctx) {
     let col;
     if (nl.onLand) col = nl.dist < -120 ? 'rgba(70,92,52,.92)' : 'rgba(120,128,74,.92)'; // terre / plage
     else {
-      const d = seabedDepth(wx, wy) + tideHeight();
+      const d = depthFromDist(nl.dist, wx, wy) + tideHeight();
       if (d < BOAT.draft) col = 'rgba(180,80,60,.55)';
       else if (d < 4) col = 'rgba(120,90,40,.40)';
       else if (d < 8) col = 'rgba(40,90,120,.5)';
@@ -538,22 +562,43 @@ function drawChart(ctx) {
   ctx.fillStyle = S.aground ? '#f87171' : '#ffd166';
   ctx.beginPath(); ctx.moveTo(0, -14); ctx.lineTo(7, 10); ctx.lineTo(0, 6); ctx.lineTo(-7, 10); ctx.closePath(); ctx.fill();
   ctx.restore();
+  // digues du port (tracé visible)
+  ctx.strokeStyle = '#5a6470'; ctx.lineCap = 'round';
+  for (const bw of BREAKWATERS) {
+    const [a0, a1] = toScreen(bw.ax, bw.ay), [b0, b1] = toScreen(bw.bx, bw.by);
+    ctx.lineWidth = Math.max(2, bw.w * sc * 2); ctx.beginPath(); ctx.moveTo(a0, a1); ctx.lineTo(b0, b1); ctx.stroke();
+  }
+  ctx.lineCap = 'butt';
+
+  // phare(s) des Medes
+  for (const is of ISLANDS) if (is.light) {
+    const [lx, ly] = toScreen(is.x, is.y);
+    if (lx > 0 && lx < w && ly > 0 && ly < h) {
+      const on = Math.sin(S.t * 2) > 0.4;       // éclat périodique
+      ctx.fillStyle = on ? '#fff4b0' : '#7a7340';
+      ctx.beginPath(); ctx.arc(lx, ly, on ? 5 : 3, 0, 7); ctx.fill();
+    }
+  }
+
   // toponymes
   const place = (wx, wy, txt, col) => {
     const [px, py] = toScreen(wx, wy);
-    if (px < -20 || px > w + 20 || py < 0 || py > h) return;
+    if (px < -30 || px > w + 30 || py < 0 || py > h) return;
     ctx.fillStyle = col; ctx.font = 'bold 11px sans-serif'; ctx.textAlign = 'center';
     ctx.fillText(txt, px, py);
   };
-  // marqueur du port
   const [hx, hy] = toScreen(0, 0);
   if (hx > -20 && hx < w + 20 && hy > -20 && hy < h + 20) {
     ctx.fillStyle = '#ffd166'; ctx.fillRect(hx - 3, hy - 3, 6, 6);
   }
-  place(-160, 0, "L'Estartit", '#f0e6c0');
-  place(1180, -120, 'Illes Medes', '#e6f0c0');
-  place(420, 1500, 'Montgrí · Cap de la Barra', '#e6f0c0');
-  place(-260, -1700, 'Platja de Pals', '#f0e6c0');
+  place(-150, -20, "L'Estartit", '#f0e6c0');
+  place(1654, -1256, 'Meda Gran ⌖', '#e6f0c0');
+  place(1560, -980, 'Illes Medes', '#e6f0c0');
+  place(760, 820, 'Cap de la Barra', '#e6f0c0');
+  place(900, 1700, 'Roca Foradada', '#e6f0c0');
+  place(-380, 1100, 'Massif du Montgrí', '#cfe0b0');
+  place(-280, -2200, 'Platja de Pals', '#f0e6c0');
+  place(-460, -3900, 'Gola del Ter', '#cfe0b0');
 
   ctx.fillStyle = '#8fb0c6'; ctx.font = '11px sans-serif'; ctx.textAlign = 'left'; ctx.fillText('1 carreau = 1 NM · ' + REGION.name, 8, h - 10);
 }
@@ -913,6 +958,92 @@ document.querySelectorAll('.preset').forEach(btn => {
     S.reef = sugg; $('reef').value = sugg; $('oReef').textContent = sugg + ' ris';
   };
 });
+/* ---------- Météo marine aléatoire & évolutive ---------- */
+function setCtl(id, v) { const el = $(id); el.value = v; el.dispatchEvent(new Event('input')); }
+function selectWeather(w) {
+  S.weather = w;
+  [...$('weatherSeg').children].forEach(b => b.classList.toggle('active', b.dataset.w === w));
+}
+function applyEnv(env) {
+  if (env.windDir != null) setCtl('windDir', Math.round(env.windDir));
+  if (env.windSpd != null) setCtl('windSpd', Math.round(env.windSpd));
+  if (env.gust != null) setCtl('gust', Math.round(env.gust));
+  if (env.sea != null) setCtl('sea', env.sea);
+  if (env.tideRange != null) setCtl('tideRange', env.tideRange);
+  if (env.curMax != null) setCtl('curMax', env.curMax);
+  if (env.weather) selectWeather(env.weather);
+  if (env.reef != null) setCtl('reef', env.reef);
+}
+const randInt = (a, b) => Math.round(a + Math.random() * (b - a));
+// Régimes de vent typiques de la Costa Brava / golfe du Lion
+const WX_ARCH = [
+  { key: 'tramuntana', w: 'sun',    name: 'Tramuntana (NNO)',       wt: 5, dir: [300, 345], spd: [18, 36], gust: [55, 90], sea: [3, 6] },
+  { key: 'garbi',      w: 'sun',    name: 'Garbí / marinada (SO)',  wt: 5, dir: [190, 230], spd: [8, 16],  gust: [15, 30], sea: [2, 3] },
+  { key: 'llevant',    w: 'rain',   name: 'Llevant (E) — houle',    wt: 3, dir: [60, 100],  spd: [12, 26], gust: [25, 45], sea: [4, 6] },
+  { key: 'migjorn',    w: 'clouds', name: 'Migjorn (S)',            wt: 2, dir: [160, 200], spd: [10, 20], gust: [20, 40], sea: [3, 4] },
+  { key: 'xaloc',      w: 'clouds', name: 'Xaloc (SE)',             wt: 2, dir: [120, 150], spd: [10, 22], gust: [20, 40], sea: [3, 5] },
+  { key: 'calma',      w: 'sun',    name: 'Calme anticyclonique',   wt: 3, dir: [0, 359],   spd: [2, 7],   gust: [5, 15],  sea: [0, 1] },
+  { key: 'grain',      w: 'storm',  name: 'Grain orageux',          wt: 2, dir: [0, 359],   spd: [18, 32], gust: [70, 100], sea: [3, 5] },
+  { key: 'boira',      w: 'fog',    name: 'Boira / brouillard',     wt: 1, dir: [0, 359],   spd: [3, 8],   gust: [5, 12],  sea: [0, 2] },
+];
+function pickArch() {
+  const pool = []; WX_ARCH.forEach(a => { for (let i = 0; i < a.wt; i++) pool.push(a); });
+  return pool[Math.floor(Math.random() * pool.length)];
+}
+function randomScenario() {
+  const a = pickArch();
+  const dir = (a.dir[0] === 0 && a.dir[1] === 359) ? randInt(0, 359) : randInt(a.dir[0], a.dir[1]);
+  const spd = randInt(a.spd[0], a.spd[1]);
+  return {
+    windDir: dir, windSpd: spd, gust: randInt(a.gust[0], a.gust[1]), sea: randInt(a.sea[0], a.sea[1]),
+    weather: a.w, name: a.name, key: a.key,
+    reef: spd > 25 ? 2 : spd > 18 ? 1 : 0,
+    tideRange: [0, 0.5, 1][randInt(0, 2)],
+    curMax: +(0.2 + Math.random() * 0.6).toFixed(1),
+  };
+}
+const Weather = {
+  evolving: false, target: null, nextChange: 0, syncT: 0,
+  start() { this.evolving = true; this.pickTarget(); },
+  pickTarget() {
+    const env = randomScenario();
+    this.target = { windDir: env.windDir, windSpd: env.windSpd, gust: env.gust, sea: env.sea, weather: env.weather };
+    this.nextChange = S.t + randInt(120, 300);
+    $('randomInfo').textContent = '⛅ Tendance : ' + env.name + ' (~' + env.windSpd + ' nds, mer ' + env.sea + ')';
+    announce('wxshift', 'La météo évolue vers ' + env.name + '.', 25);
+  },
+  tick(dt) {
+    if (!this.evolving) return;
+    if (S.t >= this.nextChange) this.pickTarget();
+    const t = this.target; if (!t) return;
+    const k = clamp(dt * 0.05, 0, 1);
+    S.windDir = norm360(S.windDir + norm180(t.windDir - S.windDir) * k);
+    S.windSpd += (t.windSpd - S.windSpd) * k;
+    S.gust += (t.gust - S.gust) * k;
+    const seaT = clamp(Math.round(S.windSpd / 6), 0, 9);
+    if (Math.random() < dt * 0.05 && S.sea !== seaT) S.sea = clamp(S.sea + Math.sign(seaT - S.sea), 0, 9);
+    if (t.weather !== S.weather && Math.abs(norm180(t.windDir - S.windDir)) < 12) selectWeather(t.weather);
+    this.syncT += dt;
+    if (this.syncT > 0.6) {
+      this.syncT = 0;
+      setCtl('windDir', Math.round(S.windDir)); setCtl('windSpd', Math.round(S.windSpd));
+      setCtl('gust', Math.round(S.gust)); setCtl('sea', S.sea);
+    }
+  },
+};
+$('randomBtn').onclick = () => {
+  const env = randomScenario();
+  applyEnv(env);
+  $('randomInfo').textContent = '🎲 ' + env.name + ' — vent ' + env.windDir + '°, ' + env.windSpd +
+    ' nds, mer ' + env.sea + '.' + (env.reef ? ' Conseil : ' + env.reef + ' ris.' : '');
+  announce('wxset', 'Nouveau scénario : ' + env.name + '.', 2);
+};
+$('evolveChk').onchange = e => {
+  Weather.evolving = e.target.checked;
+  if (Weather.evolving) { Weather.start(); }
+  else $('randomInfo').textContent = 'Météo évolutive désactivée.';
+};
+
 $('resetBtn').onclick = () => {
   S.x = START.x; S.y = START.y; S.heading = START.heading; S.autohelmHeading = START.heading;
   S.stw = 0; S.heel = 0; S.trail = []; S.aground = false; S.rudder = 0; S.rudderCmd = 0;

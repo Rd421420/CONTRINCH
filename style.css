@@ -146,8 +146,10 @@ input[type=range]{width:100%;accent-color:var(--accent);height:22px}
 .sail-row{display:flex;flex-wrap:wrap;gap:12px;margin-bottom:10px}
 .trim input:disabled{opacity:.4}
 .hint{font-size:11px;color:var(--mut);line-height:1.4;margin:6px 0 0}
-.presets{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:14px}
+.presets{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:10px}
 .presets .lbl{margin-right:2px}
+.random-row{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:6px}
+.random-row .btn{background:#15324a}
 
 /* ---------- Footer ---------- */
 .foot{text-align:center;color:var(--mut);font-size:11px;padding:14px;border-top:1px solid var(--line);margin-top:8px}

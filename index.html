@@ -156,6 +156,12 @@
         <button class="btn small preset" data-preset="storm">Grain orageux</button>
       </div>
 
+      <div class="random-row">
+        <button id="randomBtn" class="btn">🎲 Météo marine aléatoire</button>
+        <label class="chk"><input type="checkbox" id="evolveChk" /> Météo évolutive (change en mer)</label>
+      </div>
+      <p id="randomInfo" class="hint"></p>
+
       <div class="ctrl">
         <label>Direction du vent (d'où il vient) <output id="oWindDir">340°</output></label>
         <input id="windDir" type="range" min="0" max="359" value="340" step="1" />
