@@ -1,0 +1,133 @@
+:root{
+  --bg:#0a1620;
+  --panel:#0f2233;
+  --panel2:#12293c;
+  --line:#1d3c54;
+  --ink:#e9f3fb;
+  --mut:#8fb0c6;
+  --accent:#33c2ff;
+  --good:#34d399;
+  --warn:#fbbf24;
+  --bad:#f87171;
+  --boat:#ffd166;
+  --wind:#33c2ff;
+  --cur:#7c5cff;
+  --wp:#34d399;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{
+  background:radial-gradient(1200px 800px at 70% -10%, #12354b 0%, var(--bg) 60%);
+  color:var(--ink);
+  font-family:"Segoe UI",Roboto,system-ui,sans-serif;
+  min-height:100vh;
+}
+
+/* ---------- Topbar ---------- */
+.topbar{
+  display:flex;align-items:center;justify-content:space-between;
+  gap:18px;padding:12px 20px;border-bottom:1px solid var(--line);
+  background:linear-gradient(180deg,#0d2030,#0a1620);
+  position:sticky;top:0;z-index:20;flex-wrap:wrap;
+}
+.brand{display:flex;align-items:center;gap:12px}
+.logo{font-size:30px}
+.topbar h1{font-size:18px;margin:0;letter-spacing:.3px}
+.sub{margin:0;color:var(--mut);font-size:12px}
+.topbar-status{display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+.clock,.timewarp{display:flex;flex-direction:column;align-items:flex-start;gap:3px}
+.lbl{color:var(--mut);font-size:10px;text-transform:uppercase;letter-spacing:.6px}
+.clock .val{font-variant-numeric:tabular-nums;font-size:18px;font-weight:600}
+.alarm{
+  background:var(--bad);color:#1a0606;font-weight:700;padding:6px 12px;border-radius:8px;
+  font-size:13px;animation:blink 1s steps(2,start) infinite;
+}
+@keyframes blink{50%{opacity:.45}}
+.hidden{display:none!important}
+
+/* ---------- Buttons ---------- */
+.btn{
+  background:var(--panel2);color:var(--ink);border:1px solid var(--line);
+  padding:8px 12px;border-radius:9px;cursor:pointer;font-size:13px;
+  transition:.15s;
+}
+.btn:hover{border-color:var(--accent);color:#fff}
+.btn.small{padding:5px 9px;font-size:12px}
+.btn.wide{width:100%}
+.btn.ghost{background:transparent}
+.btn.active{background:var(--accent);color:#04222e;border-color:var(--accent);font-weight:600}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:9px;overflow:hidden}
+.seg.wide{display:flex;flex-wrap:wrap}
+.seg button{background:var(--panel2);color:var(--mut);border:none;padding:7px 11px;cursor:pointer;font-size:12px}
+.seg button+button{border-left:1px solid var(--line)}
+.seg button.active{background:var(--accent);color:#04222e;font-weight:600}
+
+/* ---------- Layout ---------- */
+.layout{
+  display:grid;gap:16px;padding:16px;
+  grid-template-columns:minmax(320px,1fr) minmax(360px,1.1fr) minmax(300px,.9fr);
+  grid-template-areas:"inst chart helm" "inst chart env";
+  align-items:start;max-width:1500px;margin:0 auto;
+}
+.panel{
+  background:linear-gradient(180deg,var(--panel),var(--panel2));
+  border:1px solid var(--line);border-radius:14px;padding:14px 16px;
+}
+.instruments{grid-area:inst}
+.chart{grid-area:chart}
+.helm{grid-area:helm}
+.env{grid-area:env}
+.panel-title{
+  margin:0 0 12px;font-size:13px;text-transform:uppercase;letter-spacing:1px;
+  color:var(--accent);border-bottom:1px solid var(--line);padding-bottom:8px;
+}
+
+/* ---------- Instruments ---------- */
+.gauges{display:flex;gap:10px;justify-content:center;flex-wrap:wrap}
+.gauge{text-align:center}
+.gauge canvas{width:200px;height:200px;background:#081019;border-radius:50%;border:1px solid var(--line)}
+.gauge-cap{color:var(--mut);font-size:11px;margin-top:4px}
+.readouts{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-top:14px}
+.ro{
+  background:#081019;border:1px solid var(--line);border-radius:9px;padding:7px 9px;
+  display:flex;flex-direction:column;gap:2px;
+}
+.ro-l{color:var(--mut);font-size:10px;text-transform:uppercase;letter-spacing:.4px}
+.ro-v{font-size:16px;font-weight:600;font-variant-numeric:tabular-nums}
+
+/* ---------- Chart ---------- */
+.chart canvas{width:100%;max-width:560px;aspect-ratio:1;background:#06121c;border-radius:12px;border:1px solid var(--line);cursor:crosshair;display:block;margin:0 auto}
+.chart-legend{display:flex;gap:14px;flex-wrap:wrap;justify-content:center;margin-top:10px;color:var(--mut);font-size:12px}
+.chart-legend span{display:flex;align-items:center;gap:5px}
+.dot{width:10px;height:10px;border-radius:50%;display:inline-block}
+.dot.boat{background:var(--boat)}
+.dot.wind{background:var(--wind)}
+.dot.cur{background:var(--cur)}
+.dot.wp{background:var(--wp)}
+.dot.trail{background:#3a6a86}
+.chart-actions{display:flex;gap:8px;justify-content:center;margin-top:10px;flex-wrap:wrap}
+
+/* ---------- Controls ---------- */
+.ctrl{margin-bottom:12px}
+.ctrl>label{display:flex;justify-content:space-between;font-size:12px;color:var(--mut);margin-bottom:5px;align-items:center}
+.ctrl output{color:var(--ink);font-weight:600;font-variant-numeric:tabular-nums}
+input[type=range]{width:100%;accent-color:var(--accent);height:22px}
+.ctrl-sub{display:flex;justify-content:space-between;align-items:center;margin-top:6px;flex-wrap:wrap;gap:8px}
+.chk{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--ink);cursor:pointer}
+.maneuvers{display:flex;gap:8px;margin:12px 0}
+.sails{margin-top:8px;border-top:1px solid var(--line);padding-top:10px}
+.sail-row{display:flex;flex-wrap:wrap;gap:12px;margin-bottom:10px}
+.trim input:disabled{opacity:.4}
+.hint{font-size:11px;color:var(--mut);line-height:1.4;margin:6px 0 0}
+.presets{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:14px}
+.presets .lbl{margin-right:2px}
+
+/* ---------- Footer ---------- */
+.foot{text-align:center;color:var(--mut);font-size:11px;padding:14px;border-top:1px solid var(--line);margin-top:8px}
+
+@media (max-width:1100px){
+  .layout{grid-template-columns:1fr 1fr;grid-template-areas:"inst chart" "helm env"}
+}
+@media (max-width:720px){
+  .layout{grid-template-columns:1fr;grid-template-areas:"inst" "chart" "helm" "env"}
+}

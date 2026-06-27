@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Simulateur de voile — Croiseur 11 m</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo">⛵</span>
+      <div>
+        <h1>Simulateur de voile</h1>
+        <p class="sub">Croiseur 11 m — sloop (GV + génois)</p>
+      </div>
+    </div>
+    <div class="topbar-status">
+      <div id="alarmBanner" class="alarm hidden"></div>
+      <div class="clock">
+        <span class="lbl">Horloge bord</span>
+        <span id="clock" class="val">--:--</span>
+      </div>
+      <div class="timewarp">
+        <span class="lbl">Accélération</span>
+        <div class="seg" id="timeSeg">
+          <button data-t="1" class="active">×1</button>
+          <button data-t="30">×30</button>
+          <button data-t="300">×300</button>
+          <button data-t="1800">×1800</button>
+        </div>
+      </div>
+      <button id="pauseBtn" class="btn">⏸ Pause</button>
+    </div>
+  </header>
+
+  <main class="layout">
+    <!-- ===================== INSTRUMENTS ===================== -->
+    <section class="panel instruments">
+      <h2 class="panel-title">Centrale de navigation</h2>
+      <div class="gauges">
+        <div class="gauge">
+          <canvas id="cCompass" width="260" height="260"></canvas>
+          <div class="gauge-cap">Compas / Cap</div>
+        </div>
+        <div class="gauge">
+          <canvas id="cWind" width="260" height="260"></canvas>
+          <div class="gauge-cap">Vent (réel + apparent)</div>
+        </div>
+      </div>
+
+      <div class="readouts" id="readouts">
+        <div class="ro"><span class="ro-l">STW · vitesse surface</span><span class="ro-v" id="roStw">0.0 nds</span></div>
+        <div class="ro"><span class="ro-l">SOG · vitesse fond</span><span class="ro-v" id="roSog">0.0 nds</span></div>
+        <div class="ro"><span class="ro-l">COG · route fond</span><span class="ro-v" id="roCog">---°</span></div>
+        <div class="ro"><span class="ro-l">Vent réel (TWS / TWD)</span><span class="ro-v" id="roTw">-- nds / ---°</span></div>
+        <div class="ro"><span class="ro-l">Vent apparent (AWS / AWA)</span><span class="ro-v" id="roAw">-- nds / ---°</span></div>
+        <div class="ro"><span class="ro-l">Allure</span><span class="ro-v" id="roPoint">—</span></div>
+        <div class="ro"><span class="ro-l">Gîte</span><span class="ro-v" id="roHeel">0°</span></div>
+        <div class="ro"><span class="ro-l">VMG (vers waypoint)</span><span class="ro-v" id="roVmg">0.0 nds</span></div>
+        <div class="ro"><span class="ro-l">Sonde</span><span class="ro-v" id="roDepth">-- m</span></div>
+        <div class="ro"><span class="ro-l">Marée</span><span class="ro-v" id="roTide">-- m</span></div>
+        <div class="ro"><span class="ro-l">Courant (marée)</span><span class="ro-v" id="roCurrent">-- nds / ---°</span></div>
+        <div class="ro"><span class="ro-l">Distance waypoint</span><span class="ro-v" id="roWpt">-- NM</span></div>
+      </div>
+    </section>
+
+    <!-- ===================== CARTE ===================== -->
+    <section class="panel chart">
+      <h2 class="panel-title">Carte (vue de dessus, nord en haut)</h2>
+      <canvas id="cChart" width="560" height="560"></canvas>
+      <div class="chart-legend">
+        <span><i class="dot boat"></i>Bateau</span>
+        <span><i class="dot wind"></i>Vent</span>
+        <span><i class="dot cur"></i>Courant</span>
+        <span><i class="dot wp"></i>Waypoint</span>
+        <span><i class="dot trail"></i>Sillage</span>
+      </div>
+      <div class="chart-actions">
+        <button id="setWptBtn" class="btn">📍 Placer le waypoint (clic sur la carte)</button>
+        <button id="zoomIn" class="btn small">＋</button>
+        <button id="zoomOut" class="btn small">－</button>
+      </div>
+    </section>
+
+    <!-- ===================== COMMANDES BARRE / VOILES ===================== -->
+    <section class="panel helm">
+      <h2 class="panel-title">Barre & voiles</h2>
+
+      <div class="ctrl">
+        <label>Barre (gouvernail) <output id="oRudder">0°</output></label>
+        <input id="rudder" type="range" min="-35" max="35" value="0" step="1" />
+        <div class="ctrl-sub">
+          <button class="btn small" id="rudderCenter">Barre au milieu</button>
+          <label class="chk"><input type="checkbox" id="autohelm" /> Pilote auto (tient le cap / waypoint)</label>
+        </div>
+      </div>
+
+      <div class="maneuvers">
+        <button id="tackBtn" class="btn wide">↩ Virer de bord</button>
+        <button id="gybeBtn" class="btn wide">↪ Empanner</button>
+      </div>
+
+      <div class="sails">
+        <div class="sail-row">
+          <label class="chk"><input type="checkbox" id="mainUp" checked /> Grand-voile</label>
+          <label class="chk"><input type="checkbox" id="jibUp" checked /> Génois</label>
+          <label class="chk"><input type="checkbox" id="autoTrim" checked /> Réglage auto des voiles</label>
+        </div>
+        <div class="ctrl">
+          <label>Ris (réduction de toile) <output id="oReef">0 ris</output></label>
+          <input id="reef" type="range" min="0" max="3" value="0" step="1" />
+        </div>
+        <div class="ctrl trim">
+          <label>Écoute GV <output id="oMain">auto</output></label>
+          <input id="mainTrim" type="range" min="0" max="100" value="60" step="1" disabled />
+        </div>
+        <div class="ctrl trim">
+          <label>Écoute génois <output id="oJib">auto</output></label>
+          <input id="jibTrim" type="range" min="0" max="100" value="60" step="1" disabled />
+        </div>
+        <p class="hint" id="trimHint">Réglage automatique actif — décoche « Réglage auto » pour border/choquer toi-même.</p>
+      </div>
+    </section>
+
+    <!-- ===================== ENVIRONNEMENT ===================== -->
+    <section class="panel env">
+      <h2 class="panel-title">Mer · marée · météo</h2>
+
+      <div class="presets">
+        <span class="lbl">Scénarios&nbsp;:</span>
+        <button class="btn small preset" data-preset="calm">Pétole ensoleillée</button>
+        <button class="btn small preset" data-preset="thermal">Brise thermique</button>
+        <button class="btn small preset" data-preset="breeze">Beau temps F4</button>
+        <button class="btn small preset" data-preset="gale">Coup de vent F7</button>
+        <button class="btn small preset" data-preset="fog">Brouillard</button>
+        <button class="btn small preset" data-preset="storm">Grain orageux</button>
+      </div>
+
+      <div class="ctrl">
+        <label>Direction du vent (d'où il vient) <output id="oWindDir">270°</output></label>
+        <input id="windDir" type="range" min="0" max="359" value="270" step="1" />
+      </div>
+      <div class="ctrl">
+        <label>Force du vent réel <output id="oWindSpd">12 nds</output></label>
+        <input id="windSpd" type="range" min="0" max="55" value="12" step="1" />
+      </div>
+      <div class="ctrl">
+        <label>Rafales (variabilité) <output id="oGust">moyenne</output></label>
+        <input id="gust" type="range" min="0" max="100" value="25" step="1" />
+      </div>
+      <div class="ctrl">
+        <label>État de la mer (échelle Douglas 0–9) <output id="oSea">3 — peu agitée</output></label>
+        <input id="sea" type="range" min="0" max="9" value="3" step="1" />
+      </div>
+
+      <div class="ctrl">
+        <label>Météo</label>
+        <div class="seg wide" id="weatherSeg">
+          <button data-w="sun" class="active">☀ Soleil</button>
+          <button data-w="clouds">☁ Nuages</button>
+          <button data-w="rain">🌧 Pluie</button>
+          <button data-w="fog">🌫 Brouillard</button>
+          <button data-w="storm">⛈ Orage</button>
+        </div>
+      </div>
+
+      <div class="ctrl">
+        <label>Amplitude de marée <output id="oTideRange">3.0 m</output></label>
+        <input id="tideRange" type="range" min="0" max="12" value="3" step="0.5" />
+      </div>
+      <div class="ctrl">
+        <label>Phase de marée <output id="oTidePhase">mi-marée montante</output></label>
+        <input id="tidePhase" type="range" min="0" max="100" value="25" step="1" />
+      </div>
+      <div class="ctrl">
+        <label>Courant max de marée <output id="oCurMax">1.5 nds</output></label>
+        <input id="curMax" type="range" min="0" max="6" value="1.5" step="0.1" />
+      </div>
+
+      <button id="resetBtn" class="btn wide ghost">↺ Réinitialiser la position</button>
+    </section>
+  </main>
+
+  <footer class="foot">
+    <span>Référence : croiseur 11 m · TE 1,95 m · vitesse de coque ≈ 7,5 nds. Modèle pédagogique simplifié.</span>
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>
