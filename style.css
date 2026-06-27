@@ -62,11 +62,18 @@ body{
 .seg button+button{border-left:1px solid var(--line)}
 .seg button.active{background:var(--accent);color:#04222e;font-weight:600}
 
+/* ---------- Tabbar (mobile) ---------- */
+.tabbar{display:none;position:sticky;top:0;z-index:15;gap:6px;padding:8px 10px;
+  background:#0a1620;border-bottom:1px solid var(--line);overflow-x:auto;white-space:nowrap}
+.tabbar button{flex:0 0 auto;background:var(--panel2);color:var(--mut);border:1px solid var(--line);
+  border-radius:9px;padding:9px 12px;font-size:13px;cursor:pointer}
+.tabbar button.active{background:var(--accent);color:#04222e;font-weight:600;border-color:var(--accent)}
+
 /* ---------- Layout ---------- */
 .layout{
   display:grid;gap:16px;padding:16px;
-  grid-template-columns:minmax(320px,1fr) minmax(360px,1.1fr) minmax(300px,.9fr);
-  grid-template-areas:"inst chart helm" "inst chart env";
+  grid-template-columns:minmax(300px,1fr) minmax(360px,1.1fr) minmax(300px,.9fr);
+  grid-template-areas:"inst cock helm" "inst chart env" "lessons lessons lessons";
   align-items:start;max-width:1500px;margin:0 auto;
 }
 .panel{
@@ -74,9 +81,29 @@ body{
   border:1px solid var(--line);border-radius:14px;padding:14px 16px;
 }
 .instruments{grid-area:inst}
+.cockpit{grid-area:cock}
 .chart{grid-area:chart}
 .helm{grid-area:helm}
 .env{grid-area:env}
+.lessons{grid-area:lessons}
+
+/* ---------- Cockpit / vue à bord ---------- */
+.cockpit canvas{width:100%;max-width:600px;aspect-ratio:600/340;display:block;margin:0 auto;
+  background:#06121c;border-radius:12px;border:1px solid var(--line)}
+.cockpit-hud{display:flex;gap:14px;flex-wrap:wrap;justify-content:center;margin-top:10px;
+  color:var(--ink);font-size:13px;font-variant-numeric:tabular-nums}
+.cockpit-hud b{color:var(--accent)}
+
+/* ---------- Leçons ---------- */
+.lesson-head{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:6px}
+.lesson-count{color:var(--mut);font-size:11px;text-transform:uppercase;letter-spacing:.6px}
+.lesson-title{font-size:16px;font-weight:600}
+.lesson-instr{font-size:13px;color:var(--ink);line-height:1.5;margin:4px 0 10px}
+.lesson-bar{height:8px;background:#081019;border:1px solid var(--line);border-radius:6px;overflow:hidden;margin-bottom:10px}
+.lesson-fill{height:100%;width:0;background:var(--good);transition:width .15s}
+.lesson-actions{display:flex;flex-direction:column;gap:8px}
+.lesson-nav{display:flex;gap:8px}
+.lesson-nav .btn{flex:1}
 .panel-title{
   margin:0 0 12px;font-size:13px;text-transform:uppercase;letter-spacing:1px;
   color:var(--accent);border-bottom:1px solid var(--line);padding-bottom:8px;
@@ -125,9 +152,24 @@ input[type=range]{width:100%;accent-color:var(--accent);height:22px}
 /* ---------- Footer ---------- */
 .foot{text-align:center;color:var(--mut);font-size:11px;padding:14px;border-top:1px solid var(--line);margin-top:8px}
 
-@media (max-width:1100px){
-  .layout{grid-template-columns:1fr 1fr;grid-template-areas:"inst chart" "helm env"}
+@media (max-width:1100px) and (min-width:821px){
+  .layout{grid-template-columns:1fr 1fr;
+    grid-template-areas:"cock inst" "chart helm" "env lessons"}
 }
-@media (max-width:720px){
-  .layout{grid-template-columns:1fr;grid-template-areas:"inst" "chart" "helm" "env"}
+
+/* ---------- Mobile : onglets, une section à la fois ---------- */
+@media (max-width:820px){
+  .tabbar{display:flex}
+  .layout{display:block;padding:12px;max-width:640px}
+  .panel{margin-bottom:0}
+  body.mobile .panel{display:none}
+  body.mobile .panel.tab-active{display:block}
+  /* commandes plus grosses au doigt */
+  input[type=range]{height:34px}
+  .btn{padding:11px 14px;font-size:14px}
+  .seg button{padding:10px 12px}
+  .gauge canvas{width:160px;height:160px}
+  .readouts{grid-template-columns:1fr 1fr}
+  .topbar h1{font-size:16px}
+  .topbar-status{gap:10px}
 }

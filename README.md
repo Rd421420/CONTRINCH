@@ -15,17 +15,24 @@ Aucune installation : ouvre simplement **`index.html`** dans un navigateur
 
 | Domaine | Détail |
 |---|---|
-| **Allures** | Polaire de vitesse simplifiée d'un croiseur 11 m : no-go (vent debout), près, travers, largue, vent arrière. Vitesse de coque ≈ 7,5 nds. |
+| **Allures** | **Vraie polaire** de vitesse (matrice force de vent × angle au vent, interpolation bilinéaire) : no-go, près, travers, largue, vent arrière. Coque ≈ 7,5 nds. |
 | **Vent** | Vent réel (direction/force) + **vent apparent** calculé, rafales paramétrables. |
 | **Voiles** | GV + génois (hissées ou non), **prise de ris** (0–3), écoutes auto ou manuelles, faseyement dans le no-go. |
-| **Manœuvres** | Virer de bord, empanner (auto-barre qui passe le bateau de l'autre bord). |
+| **Manœuvres** | Virer de bord, empanner. **Inertie de barre** (le gouvernail rejoint la consigne progressivement). |
+| **Vagues** | État de mer Douglas 0–9 → hauteur de houle : **tangage/roulis** dans la vue à bord et **effet sur la vitesse** (frein dans le clapot debout, surf au portant). |
 | **Gîte** | Calculée depuis la pression du vent apparent ; alarme si gîte excessive. |
 | **Marée** | Amplitude, phase (montante/descendante/étale), hauteur d'eau, cycle ~12 h 25. |
-| **Courant** | Courant de marée (flot/jusant), vecteur ajouté à la route fond. |
-| **Météo** | Soleil, nuages, pluie, brouillard, orage — influence rafales et vent. |
-| **Mer** | État de la mer échelle Douglas 0–9. |
+| **Courant** | Courant de marée (flot/jusant) **variable selon le lieu** (accélère dans les petits fonds). |
+| **Météo** | Soleil, nuages, pluie, brouillard, orage — influence rafales/vent **et le rendu de la vue à bord** (ciel, pluie, brouillard, éclairs). |
 | **Sonde** | Bathymétrie + haut-fond, hauteur de marée, **alarme d'échouement** (TE 1,95 m). |
 | **Navigation** | Waypoint cliquable, route, distance/relèvement, **VMG**, pilote auto. |
+
+## Vue à bord, leçons et son
+
+- **Vue à bord (horizon)** : perspective du barreur, **horizon qui s'incline** avec la gîte et tangue avec la houle, voiles visibles (et qui faseyent dans le no-go), bandeau de cap et girouette de vent apparent. Le décor change avec la météo.
+- **Leçons guidées** : parcours en 7 étapes (près → travers → largue → virement → ris → empannage → waypoint) avec validation automatique et barre de progression.
+- **Son & voix** : bouton **🔊 Son** pour activer le bruit du vent/des vagues (qui suit la force réelle) et les **annonces vocales** en français (consignes des leçons, alarmes de sonde/échouement). *À activer par un clic (politique des navigateurs).*
+- **Mobile / tablette** : barre d'**onglets** en haut, une section à la fois, grosses commandes tactiles.
 
 ## Commandes
 

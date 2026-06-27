@@ -2,7 +2,7 @@
 <html lang="fr">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <title>Simulateur de voile — Croiseur 11 m</title>
   <link rel="stylesheet" href="style.css" />
 </head>
@@ -30,13 +30,31 @@
           <button data-t="1800">×1800</button>
         </div>
       </div>
+      <button id="soundBtn" class="btn">🔇 Son</button>
       <button id="pauseBtn" class="btn">⏸ Pause</button>
     </div>
   </header>
 
+  <!-- Barre d'onglets (mobile) -->
+  <nav class="tabbar" id="tabbar">
+    <button data-tab="cockpit" class="active">👁 Vue bord</button>
+    <button data-tab="instr">🧭 Instruments</button>
+    <button data-tab="chart">🗺 Carte</button>
+    <button data-tab="helm">🛞 Barre</button>
+    <button data-tab="env">🌊 Réglages</button>
+    <button data-tab="lessons">🎓 Leçons</button>
+  </nav>
+
   <main class="layout">
+    <!-- ===================== VUE À BORD ===================== -->
+    <section class="panel cockpit" data-tab="cockpit">
+      <h2 class="panel-title">Vue à bord (horizon)</h2>
+      <canvas id="cCockpit" width="600" height="340"></canvas>
+      <div class="cockpit-hud" id="cockpitHud"></div>
+    </section>
+
     <!-- ===================== INSTRUMENTS ===================== -->
-    <section class="panel instruments">
+    <section class="panel instruments" data-tab="instr">
       <h2 class="panel-title">Centrale de navigation</h2>
       <div class="gauges">
         <div class="gauge">
@@ -66,7 +84,7 @@
     </section>
 
     <!-- ===================== CARTE ===================== -->
-    <section class="panel chart">
+    <section class="panel chart" data-tab="chart">
       <h2 class="panel-title">Carte (vue de dessus, nord en haut)</h2>
       <canvas id="cChart" width="560" height="560"></canvas>
       <div class="chart-legend">
@@ -84,7 +102,7 @@
     </section>
 
     <!-- ===================== COMMANDES BARRE / VOILES ===================== -->
-    <section class="panel helm">
+    <section class="panel helm" data-tab="helm">
       <h2 class="panel-title">Barre & voiles</h2>
 
       <div class="ctrl">
@@ -124,7 +142,7 @@
     </section>
 
     <!-- ===================== ENVIRONNEMENT ===================== -->
-    <section class="panel env">
+    <section class="panel env" data-tab="env">
       <h2 class="panel-title">Mer · marée · météo</h2>
 
       <div class="presets">
@@ -179,6 +197,30 @@
       </div>
 
       <button id="resetBtn" class="btn wide ghost">↺ Réinitialiser la position</button>
+    </section>
+
+    <!-- ===================== LEÇONS GUIDÉES ===================== -->
+    <section class="panel lessons" data-tab="lessons">
+      <h2 class="panel-title">Leçons guidées</h2>
+      <div class="lesson-head">
+        <span id="lessonCount" class="lesson-count">Leçon —/—</span>
+        <span id="lessonTitle" class="lesson-title">Prêt à apprendre&nbsp;?</span>
+      </div>
+      <p id="lessonInstr" class="lesson-instr">
+        Lance le parcours pour apprendre pas à pas&nbsp;: les allures, le virement,
+        l'empannage, la prise de ris et l'arrivée au waypoint. Active le son pour
+        entendre les consignes et la validation.
+      </p>
+      <div class="lesson-bar"><div id="lessonFill" class="lesson-fill"></div></div>
+      <div class="lesson-actions">
+        <button id="lessonStart" class="btn wide">▶ Démarrer les leçons</button>
+        <div class="lesson-nav hidden" id="lessonNav">
+          <button id="lessonPrev" class="btn small">◀ Précédente</button>
+          <button id="lessonSkip" class="btn small">Passer ▶</button>
+          <button id="lessonQuit" class="btn small ghost">Quitter</button>
+        </div>
+      </div>
+      <p id="lessonStatus" class="hint"></p>
     </section>
   </main>
 
