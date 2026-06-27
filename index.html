@@ -51,6 +51,12 @@
     <section class="panel cockpit" data-tab="cockpit">
       <h2 class="panel-title">Vue à bord (horizon)</h2>
       <canvas id="cCockpit" width="600" height="340"></canvas>
+      <div class="view-seg seg" id="viewSeg">
+        <button data-v="0" class="active">▲ Avant</button>
+        <button data-v="-90">◀ Bâbord</button>
+        <button data-v="90">Tribord ▶</button>
+        <button data-v="180">▼ Arrière</button>
+      </div>
       <div class="cockpit-hud" id="cockpitHud"></div>
     </section>
 

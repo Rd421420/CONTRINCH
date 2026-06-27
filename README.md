@@ -71,6 +71,7 @@ sur tablette ou pour une vue immersive sur ordinateur.
 ## Vue à bord, leçons et son
 
 - **Vue à bord (horizon)** : perspective du barreur, **horizon qui s'incline** avec la gîte et tangue avec la houle, voiles visibles (et qui faseyent dans le no-go), bandeau de cap et girouette de vent apparent. Le décor change avec la météo.
+  - **Direction du regard** : boutons **▲ Avant / ◀ Bâbord / Tribord ▶ / ▼ Arrière** (ou touche **V** pour faire le tour). En vue arrière on voit la **barre à roue**, le balcon arrière et le **sillage** ; en vue de côté le pont, les filières et la voile ; le bandeau de cap, la côte et la gîte pivotent en conséquence.
 - **Leçons guidées** : parcours en 7 étapes (près → travers → largue → virement → ris → empannage → waypoint) avec validation automatique et barre de progression.
 - **Son & voix** : bouton **🔊 Son** pour activer le bruit du vent/des vagues (qui suit la force réelle) et les **annonces vocales** en français (consignes des leçons, alarmes de sonde/échouement). *À activer par un clic (politique des navigateurs).*
 - **Mobile / tablette** : barre d'**onglets** en haut, une section à la fois, grosses commandes tactiles.

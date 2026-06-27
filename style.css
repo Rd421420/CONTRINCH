@@ -90,6 +90,7 @@ body{
 /* ---------- Cockpit / vue à bord ---------- */
 .cockpit canvas{width:100%;max-width:600px;aspect-ratio:600/340;display:block;margin:0 auto;
   background:#06121c;border-radius:12px;border:1px solid var(--line)}
+.view-seg{display:flex;justify-content:center;margin:10px auto 0;width:fit-content;flex-wrap:wrap}
 .cockpit-hud{display:flex;gap:14px;flex-wrap:wrap;justify-content:center;margin-top:10px;
   color:var(--ink);font-size:13px;font-variant-numeric:tabular-nums}
 .cockpit-hud b{color:var(--accent)}

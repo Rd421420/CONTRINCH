@@ -95,6 +95,7 @@ const S = {
 
   // Mouvements de coque (vagues)
   pitch: 0, roll: 0,
+  viewOffset: 0,    // direction du regard à bord : 0 avant, ±90 côtés, 180 arrière
 
   aground: false,
 };
@@ -382,9 +383,15 @@ function drawCockpit(ctx) {
   const aw = S._aw || apparentWind();
   ctx.clearRect(0, 0, W, H);
 
-  const pitchPx = S.pitch * 7;
+  const off = S.viewOffset, offR = off * DEG;
+  const viewBearing = norm360(S.heading + off);
   const heelDir = -(Math.sign(aw.twa) || 1);       // gîte sous le vent
-  const rollDeg = heelDir * S.heel + S.roll * 1.3;
+  // la gîte se voit comme un roulis vu de l'avant/arrière, et comme un
+  // décalage d'horizon vu par le travers (pont qui penche vers/loin de l'eau)
+  const rollBase = heelDir * S.heel + S.roll * 1.3;
+  const rollDeg = rollBase * Math.cos(offR);
+  const beamLift = Math.sin(offR) * heelDir * S.heel * 1.7;
+  const pitchPx = S.pitch * 7 + beamLift;
 
   // Scène (ciel + mer) inclinée par la gîte
   ctx.save();
@@ -398,7 +405,7 @@ function drawCockpit(ctx) {
   ctx.fillStyle = g; ctx.fillRect(-W, 0, 2 * W, H * 1.6);
   ctx.strokeStyle = pal.hz; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(-W, 0); ctx.lineTo(W, 0); ctx.stroke();
   // silhouette de la côte (Montgrí, plage, Medes) sur l'horizon
-  drawCoastSilhouette(ctx, W, H);
+  drawCoastSilhouette(ctx, W, H, viewBearing);
   // crêtes de vagues animées (amplitude selon l'état de mer)
   const amp = Math.min(SEA_HS[S.sea], 8);
   ctx.strokeStyle = pal.wv; ctx.lineWidth = 1.5;
@@ -426,55 +433,120 @@ function drawCockpit(ctx) {
   }
   if (S.weather === 'storm' && Math.sin(S.t * 7) > 0.985) { ctx.fillStyle = 'rgba(255,255,255,.35)'; ctx.fillRect(0, 0, W, H); }
 
-  // Pont + mât + voiles (repère bateau, droit)
-  drawBoatForeground(ctx, W, H, aw);
-  // Bandeau de cap + girouette
-  drawHeadingTape(ctx, W);
+  // Pont du bateau (selon la direction du regard)
+  const view = off === 0 ? 'fwd' : off === 180 ? 'aft' : off < 0 ? 'port' : 'stbd';
+  drawBoatForeground(ctx, W, H, aw, view);
+  // Bandeau de cap (centré sur la direction regardée) + girouette + libellé de vue
+  drawHeadingTape(ctx, W, viewBearing);
   drawVane(ctx, W, aw);
+  const vlabel = { fwd: 'AVANT', aft: 'ARRIÈRE', port: 'BÂBORD', stbd: 'TRIBORD' }[view];
+  ctx.fillStyle = 'rgba(4,12,20,.6)'; ctx.fillRect(0, H - 20, 96, 20);
+  ctx.fillStyle = '#ffd166'; ctx.font = 'bold 11px sans-serif'; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+  ctx.fillText('▣ Vue ' + vlabel, 8, H - 10);
 }
-function drawBoatForeground(ctx, W, H, aw) {
-  const cx = W / 2, deckY = H - 6;
-  // pont (étrave qui s'éloigne)
+function drawBoatForeground(ctx, W, H, aw, view) {
+  const cx = W / 2;
+  const side = -(Math.sign(aw.twa) || 1);           // côté sous le vent (bôme)
+  const flutter = S.luffing ? Math.sin(S.t * 22) * 14 : 0;
+  if (view === 'aft') return drawForegroundAft(ctx, W, H, side);
+  if (view === 'port' || view === 'stbd') return drawForegroundSide(ctx, W, H, aw, side, view);
+
+  // ----- Vue AVANT : étrave + mât + voiles -----
+  const deckY = H - 6;
   ctx.fillStyle = '#101d29';
   ctx.beginPath(); ctx.moveTo(cx, H * 0.62); ctx.lineTo(cx + W * 0.42, deckY); ctx.lineTo(cx - W * 0.42, deckY); ctx.closePath(); ctx.fill();
   ctx.strokeStyle = '#23435c'; ctx.lineWidth = 2; ctx.stroke();
-  // mât
   const mastBaseY = H * 0.78, mastTopY = 12;
   ctx.strokeStyle = '#c9d7e0'; ctx.lineWidth = 4;
   ctx.beginPath(); ctx.moveTo(cx, mastBaseY); ctx.lineTo(cx, mastTopY); ctx.stroke();
-
   if (sailFactor() <= 0) return;
-  const side = -(Math.sign(aw.twa) || 1);           // bôme sous le vent
-  const flutter = S.luffing ? Math.sin(S.t * 22) * 14 : 0;
-  // grand-voile
   if (S.mainUp) {
-    const out = (1 - S.mainTrim) * 0.7 + 0.12;
-    const tipX = cx + side * (W * 0.34 * out) + flutter;
+    const out = (1 - S.mainTrim) * 0.7 + 0.12, tipX = cx + side * (W * 0.34 * out) + flutter;
     ctx.fillStyle = S.luffing ? 'rgba(235,243,251,.55)' : 'rgba(235,243,251,.92)';
-    ctx.beginPath();
-    ctx.moveTo(cx, mastTopY + 6);
+    ctx.beginPath(); ctx.moveTo(cx, mastTopY + 6);
     ctx.quadraticCurveTo(cx + side * 30, (mastTopY + mastBaseY) / 2, tipX, mastBaseY - 4);
     ctx.lineTo(cx, mastBaseY - 4); ctx.closePath(); ctx.fill();
     ctx.strokeStyle = '#8fb0c6'; ctx.lineWidth = 1; ctx.stroke();
   }
-  // génois (devant le mât)
   if (S.jibUp) {
-    const out = (1 - S.jibTrim) * 0.6 + 0.1;
-    const tipX = cx + side * (W * 0.26 * out) + flutter * 0.7;
+    const out = (1 - S.jibTrim) * 0.6 + 0.1, tipX = cx + side * (W * 0.26 * out) + flutter * 0.7;
     ctx.fillStyle = S.luffing ? 'rgba(210,225,240,.5)' : 'rgba(210,225,240,.85)';
-    ctx.beginPath();
-    ctx.moveTo(cx, mastTopY + 40);
+    ctx.beginPath(); ctx.moveTo(cx, mastTopY + 40);
     ctx.quadraticCurveTo(cx + side * 24, H * 0.55, tipX, H * 0.7);
     ctx.lineTo(cx, H * 0.7); ctx.closePath(); ctx.fill();
   }
 }
-function drawHeadingTape(ctx, W) {
+/* ----- Vue ARRIÈRE : cockpit, barre à roue, jupe, balcon arrière, sillage ----- */
+function drawForegroundAft(ctx, W, H, side) {
+  const cx = W / 2, hzY = H * 0.52;
+  // sillage qui s'éloigne vers l'horizon (s'élargit près du bateau)
+  ctx.fillStyle = 'rgba(255,255,255,.10)';
+  ctx.beginPath(); ctx.moveTo(cx, hzY + 4); ctx.lineTo(cx + W * 0.22, H); ctx.lineTo(cx - W * 0.22, H); ctx.closePath(); ctx.fill();
+  // remous animés du sillage
+  ctx.strokeStyle = 'rgba(255,255,255,.18)'; ctx.lineWidth = 2;
+  for (let k = 0; k < 4; k++) {
+    const t = ((S.t * 0.6 + k * 0.25) % 1), yy = hzY + 6 + t * (H - hzY - 6), wdt = 6 + t * W * 0.2;
+    ctx.beginPath(); ctx.moveTo(cx - wdt, yy); ctx.quadraticCurveTo(cx, yy + 5, cx + wdt, yy); ctx.stroke();
+  }
+  // pont / cockpit
+  ctx.fillStyle = '#101d29';
+  ctx.beginPath(); ctx.moveTo(cx - W * 0.46, H); ctx.lineTo(cx + W * 0.46, H);
+  ctx.lineTo(cx + W * 0.30, H * 0.66); ctx.lineTo(cx - W * 0.30, H * 0.66); ctx.closePath(); ctx.fill();
+  ctx.strokeStyle = '#23435c'; ctx.lineWidth = 2; ctx.stroke();
+  // balcon arrière (pushpit) + filières
+  ctx.strokeStyle = '#7f97a8'; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(cx - W * 0.30, H * 0.66); ctx.lineTo(cx - W * 0.30, H * 0.58);
+  ctx.lineTo(cx + W * 0.30, H * 0.58); ctx.lineTo(cx + W * 0.30, H * 0.66); ctx.stroke();
+  // barre à roue
+  const wy = H * 0.84;
+  ctx.strokeStyle = '#c9d7e0'; ctx.lineWidth = 3;
+  ctx.beginPath(); ctx.arc(cx, wy, 30, 0, 7); ctx.stroke();
+  for (let a = 0; a < 6; a++) { ctx.beginPath(); ctx.moveTo(cx, wy); ctx.lineTo(cx + 30 * Math.cos(a * 1.047), wy + 30 * Math.sin(a * 1.047)); ctx.stroke(); }
+  ctx.fillStyle = '#7f97a8'; ctx.fillRect(cx - 3, wy, 6, H - wy);   // colonne de barre
+  // bôme passant au-dessus (sous le vent) si GV haute
+  if (S.mainUp && sailFactor() > 0) {
+    ctx.strokeStyle = '#c9d7e0'; ctx.lineWidth = 5;
+    ctx.beginPath(); ctx.moveTo(cx, H * 0.30); ctx.lineTo(cx + side * W * 0.34, H * 0.34); ctx.stroke();
+    ctx.fillStyle = 'rgba(235,243,251,.5)';   // dessous de la GV qui part vers l'avant
+    ctx.beginPath(); ctx.moveTo(cx, H * 0.30); ctx.lineTo(cx + side * W * 0.34, H * 0.34); ctx.lineTo(cx + side * W * 0.10, 14); ctx.lineTo(cx, 18); ctx.closePath(); ctx.fill();
+  }
+}
+/* ----- Vue de CÔTÉ : pont latéral, hauban, chandeliers, voile au-dessus ----- */
+function drawForegroundSide(ctx, W, H, aw, side, view) {
+  const cx = W / 2;
+  const sgn = view === 'port' ? -1 : 1;            // côté regardé
+  // liston / pont qui file (perspective vers l'avant à gauche, l'arrière à droite)
+  ctx.fillStyle = '#101d29';
+  ctx.beginPath(); ctx.moveTo(0, H); ctx.lineTo(W, H); ctx.lineTo(W, H * 0.80); ctx.lineTo(0, H * 0.74); ctx.closePath(); ctx.fill();
+  ctx.strokeStyle = '#23435c'; ctx.lineWidth = 2; ctx.stroke();
+  // filières + chandeliers
+  ctx.strokeStyle = '#7f97a8'; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(0, H * 0.66); ctx.lineTo(W, H * 0.70); ctx.stroke();
+  for (let i = 0; i <= 5; i++) { const x = i / 5 * W; ctx.beginPath(); ctx.moveTo(x, H * 0.66 + i * 0.8); ctx.lineTo(x, H * 0.80); ctx.stroke(); }
+  // hauban tendu vers le haut
+  ctx.strokeStyle = '#9fb6c6'; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(W * 0.5, H * 0.72); ctx.lineTo(W * 0.62, 6); ctx.stroke();
+  // voile visible si on regarde sous le vent
+  const leeView = (sgn === side);
+  if (sailFactor() > 0 && S.mainUp) {
+    if (leeView) {
+      ctx.fillStyle = S.luffing ? 'rgba(235,243,251,.5)' : 'rgba(235,243,251,.9)';
+      ctx.beginPath(); ctx.moveTo(W * 0.18, 8); ctx.quadraticCurveTo(W * 0.5, H * 0.3, W * 0.86, H * 0.5);
+      ctx.lineTo(W * 0.86, H * 0.62); ctx.quadraticCurveTo(W * 0.5, H * 0.45, W * 0.16, 20); ctx.closePath(); ctx.fill();
+    } else {
+      // côté au vent : on voit surtout le mât et le bord d'attaque
+      ctx.strokeStyle = '#c9d7e0'; ctx.lineWidth = 4;
+      ctx.beginPath(); ctx.moveTo(W * 0.5, H * 0.72); ctx.lineTo(W * 0.5, 8); ctx.stroke();
+    }
+  }
+}
+function drawHeadingTape(ctx, W, centerBearing) {
   ctx.fillStyle = 'rgba(4,12,20,.6)'; ctx.fillRect(0, 0, W, 22);
   const ppd = W / 110;
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   for (let d = -55; d <= 55; d += 5) {
-    const a = norm360(Math.round(S.heading / 5) * 5 + d);
-    const x = W / 2 + (norm180(a - S.heading)) * ppd;
+    const a = norm360(Math.round(centerBearing / 5) * 5 + d);
+    const x = W / 2 + (norm180(a - centerBearing)) * ppd;
     if (x < 0 || x > W) continue;
     const big = a % 30 === 0;
     ctx.strokeStyle = '#3a6a86'; ctx.beginPath(); ctx.moveTo(x, 22); ctx.lineTo(x, big ? 10 : 15); ctx.stroke();
@@ -498,13 +570,13 @@ function drawVane(ctx, W, aw) {
 }
 /* Silhouette de la terre vue depuis le bateau (lancer de rayons par colonne).
    Dessinée dans le repère incliné, l'horizon étant à y = 0. */
-function drawCoastSilhouette(ctx, W, H) {
+function drawCoastSilhouette(ctx, W, H, baseBearing) {
   const ppd = W / 110;                 // champ de vision ~110°, comme le bandeau de cap
   const maxR = 7000, stepR = 80;
   ctx.fillStyle = '#0d2a1d';
   ctx.beginPath(); ctx.moveTo(-W / 2, 2);
   for (let dpx = -W / 2; dpx <= W / 2; dpx += 10) {
-    const bearing = S.heading + dpx / ppd;
+    const bearing = baseBearing + dpx / ppd;
     const sb = Math.sin(bearing * DEG), cb = Math.cos(bearing * DEG);
     let hit = 0;
     for (let r = 140; r < maxR; r += stepR) {
@@ -908,6 +980,18 @@ $('timeSeg').addEventListener('click', e => {
 $('pauseBtn').onclick = () => { S.running = !S.running; $('pauseBtn').textContent = S.running ? '⏸ Pause' : '▶ Reprendre'; };
 $('soundBtn').onclick = () => Sound.enable();
 
+// Direction du regard à bord
+$('viewSeg').addEventListener('click', e => {
+  if (e.target.tagName !== 'BUTTON') return;
+  [...$('viewSeg').children].forEach(b => b.classList.remove('active'));
+  e.target.classList.add('active'); S.viewOffset = parseFloat(e.target.dataset.v);
+});
+function cycleView() {
+  const order = [0, 90, 180, -90];
+  S.viewOffset = order[(order.indexOf(S.viewOffset) + 1) % order.length];
+  [...$('viewSeg').children].forEach(b => b.classList.toggle('active', parseFloat(b.dataset.v) === S.viewOffset));
+}
+
 // Plein écran
 $('fsBtn').onclick = () => {
   const el = document.documentElement;
@@ -1075,6 +1159,7 @@ document.addEventListener('keydown', e => {
   if (e.key === 'ArrowRight') { S.rudderCmd = clamp(S.rudderCmd + 5, -35, 35); S.autohelm = false; $('autohelm').checked = false; }
   if (e.key === 'ArrowUp' || e.key === 'ArrowDown') S.rudderCmd = 0;
   if (e.code === 'Space') { e.preventDefault(); $('pauseBtn').click(); }
+  if (e.key === 'v' || e.key === 'V') cycleView();
   $('rudder').value = S.rudderCmd; $('oRudder').textContent = (S.rudderCmd > 0 ? '+' : '') + S.rudderCmd + '°';
 });
 
