@@ -73,22 +73,22 @@ function polarSpeed(twa, tws) {
 const S = {
   running: true, timeScale: 1, t: 6 * 3600,
 
-  // Environnement
-  windDir: 270, windSpd: 12, windSpdInst: 12, gust: 25,
-  sea: 3, weather: 'sun',
-  tideRange: 3.0, tidePhase: 0.25, curMax: 1.5,
+  // Environnement (réglages Méditerranée / L'Estartit par défaut)
+  windDir: 340, windSpd: 14, windSpdInst: 14, gust: 30,
+  sea: 2, weather: 'sun',
+  tideRange: 0.5, tidePhase: 0.5, curMax: 0.4,
 
-  // Bateau
-  heading: 45, rudder: 0, rudderCmd: 0,
+  // Bateau (départ : sortie du port de L'Estartit, cap au large)
+  heading: 90, rudder: 0, rudderCmd: 0,
   stw: 0, heel: 0, leeway: 0,
   mainUp: true, jibUp: true, reef: 0,
   autoTrim: true, mainTrim: 0.6, jibTrim: 0.6, luffing: false,
 
-  // Position
-  x: 0, y: 0, trail: [], waypoint: { x: 0, y: 1852 * 2 },
+  // Position (mètres, origine = port de L'Estartit)
+  x: 250, y: 0, trail: [], waypoint: { x: 850, y: -120 },
 
   // Pilote / manœuvres
-  autohelm: false, autohelmHeading: 45, maneuver: null,
+  autohelm: false, autohelmHeading: 90, maneuver: null,
 
   // Carte
   chartScale: 0.06, placingWpt: false,
@@ -100,13 +100,50 @@ const S = {
 };
 
 /* ---------------------------------------------------------------------
-   Environnement : fond, marée, courant, vent apparent, vagues
+   ZONE DE NAVIGATION — L'Estartit / Îles Medes (Méditerranée, Costa Brava)
+   Repère mètres : origine = port de L'Estartit, +x = est (large), +y = nord.
+   Côte stylisée mais reconnaissable : massif du Montgrí (Cap de la Barra)
+   au nord qui avance vers l'est, longue plage sablonneuse au sud (baie de
+   Pals), et l'archipel des Medes au large à l'est-sud-est.
    --------------------------------------------------------------------- */
+const REGION = { name: "L'Estartit — Îles Medes" };
+
+// Limite est de la terre ferme selon la latitude y (terre si x < coastX)
+function coastX(y) {
+  let cx = -90;
+  cx += 720 * Math.exp(-Math.pow((y - 1400) / 700, 2));   // cap rocheux du Montgrí au nord
+  cx -= 260 * Math.exp(-Math.pow((y + 1800) / 1500, 2));  // baie sableuse au sud
+  cx += 40 * Math.sin(y / 320);                            // découpes de la côte
+  return cx;
+}
+// Archipel des Medes (îles + cailloux) au large
+const ISLANDS = [
+  { x: 1180, y: -120, r: 200, name: 'Meda Gran' },
+  { x: 1430, y: -340, r: 120, name: 'Meda Petita' },
+  { x: 1040, y: 130, r: 70 },
+  { x: 1330, y: 70, r: 55 },
+  { x: 1520, y: -160, r: 45 },
+];
+const START = { x: 250, y: 0, heading: 90 };
+
+function nearestLand(x, y) {
+  let nd = x - coastX(y);            // >0 = en mer (à l'est de la côte)
+  let onLand = nd < 0;
+  for (const is of ISLANDS) {
+    const dd = Math.hypot(x - is.x, y - is.y) - is.r;
+    if (dd < 0) onLand = true;
+    if (dd < nd) nd = dd;
+  }
+  return { dist: nd, onLand };
+}
+function isLand(x, y) { return nearestLand(x, y).onLand; }
+
 function seabedDepth(x, y) {
-  const base = 14 + 7 * Math.sin(x / 900) * Math.cos(y / 1100) + 4 * Math.sin((x + y) / 1700);
-  const dx = x - 600, dy = y - 1200;
-  const shoal = 12 * Math.exp(-(dx * dx + dy * dy) / (2 * 480 * 480));
-  return base - shoal;
+  const { dist, onLand } = nearestLand(x, y);
+  if (onLand) return -3;
+  let d = 1.0 + Math.max(0, dist) * 0.045;                // la côte s'enfonce vers le large
+  d += 1.5 * Math.sin(x / 600) * Math.cos(y / 700) * clamp(dist / 250, 0, 1); // relief sous-marin (au large)
+  return clamp(d, 0.3, 48);
 }
 function tideHeight() { return (S.tideRange / 2) * (1 - Math.cos(2 * Math.PI * S.tidePhase)); }
 function tideCurrentBase() {
@@ -336,6 +373,8 @@ function drawCockpit(ctx) {
   g.addColorStop(0, pal.sea1); g.addColorStop(1, pal.sea2);
   ctx.fillStyle = g; ctx.fillRect(-W, 0, 2 * W, H * 1.6);
   ctx.strokeStyle = pal.hz; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(-W, 0); ctx.lineTo(W, 0); ctx.stroke();
+  // silhouette de la côte (Montgrí, plage, Medes) sur l'horizon
+  drawCoastSilhouette(ctx, W, H);
   // crêtes de vagues animées (amplitude selon l'état de mer)
   const amp = Math.min(SEA_HS[S.sea], 8);
   ctx.strokeStyle = pal.wv; ctx.lineWidth = 1.5;
@@ -433,6 +472,25 @@ function drawVane(ctx, W, aw) {
   ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx + (R - 4) * Math.sin(a), cy - (R - 4) * Math.cos(a)); ctx.stroke();
   ctx.fillStyle = '#8fb0c6'; ctx.font = '9px sans-serif'; ctx.textAlign = 'center'; ctx.fillText('vent app.', cx, cy + R + 12);
 }
+/* Silhouette de la terre vue depuis le bateau (lancer de rayons par colonne).
+   Dessinée dans le repère incliné, l'horizon étant à y = 0. */
+function drawCoastSilhouette(ctx, W, H) {
+  const ppd = W / 110;                 // champ de vision ~110°, comme le bandeau de cap
+  const maxR = 7000, stepR = 80;
+  ctx.fillStyle = '#0d2a1d';
+  ctx.beginPath(); ctx.moveTo(-W / 2, 2);
+  for (let dpx = -W / 2; dpx <= W / 2; dpx += 10) {
+    const bearing = S.heading + dpx / ppd;
+    const sb = Math.sin(bearing * DEG), cb = Math.cos(bearing * DEG);
+    let hit = 0;
+    for (let r = 140; r < maxR; r += stepR) {
+      if (isLand(S.x + sb * r, S.y + cb * r)) { hit = r; break; }
+    }
+    const hgt = hit ? clamp(70000 / hit, 3, H * 0.32) : 0;
+    ctx.lineTo(dpx, 2 - hgt);
+  }
+  ctx.lineTo(W / 2, 2); ctx.closePath(); ctx.fill();
+}
 
 /* ---------- Carte ---------- */
 function drawChart(ctx) {
@@ -440,16 +498,20 @@ function drawChart(ctx) {
   ctx.clearRect(0, 0, w, h);
   const sc = S.chartScale, cx = w / 2, cy = h / 2;
   const toScreen = (x, y) => [cx + (x - S.x) * sc, cy - (y - S.y) * sc];
-  const grid = 28;
+  const grid = 14;
   for (let i = 0; i < w; i += grid) for (let j = 0; j < h; j += grid) {
     const wx = S.x + (i + grid / 2 - cx) / sc, wy = S.y - (j + grid / 2 - cy) / sc;
-    const d = seabedDepth(wx, wy) + tideHeight();
+    const nl = nearestLand(wx, wy);
     let col;
-    if (d < BOAT.draft) col = 'rgba(180,80,60,.55)';
-    else if (d < 4) col = 'rgba(120,90,40,.40)';
-    else if (d < 8) col = 'rgba(40,90,120,.45)';
-    else if (d < 16) col = 'rgba(20,70,110,.45)';
-    else col = 'rgba(10,45,80,.45)';
+    if (nl.onLand) col = nl.dist < -120 ? 'rgba(70,92,52,.92)' : 'rgba(120,128,74,.92)'; // terre / plage
+    else {
+      const d = seabedDepth(wx, wy) + tideHeight();
+      if (d < BOAT.draft) col = 'rgba(180,80,60,.55)';
+      else if (d < 4) col = 'rgba(120,90,40,.40)';
+      else if (d < 8) col = 'rgba(40,90,120,.5)';
+      else if (d < 16) col = 'rgba(20,70,110,.5)';
+      else col = 'rgba(10,45,80,.5)';
+    }
     ctx.fillStyle = col; ctx.fillRect(i, j, grid, grid);
   }
   ctx.strokeStyle = 'rgba(120,160,190,.12)'; ctx.lineWidth = 1;
@@ -476,7 +538,24 @@ function drawChart(ctx) {
   ctx.fillStyle = S.aground ? '#f87171' : '#ffd166';
   ctx.beginPath(); ctx.moveTo(0, -14); ctx.lineTo(7, 10); ctx.lineTo(0, 6); ctx.lineTo(-7, 10); ctx.closePath(); ctx.fill();
   ctx.restore();
-  ctx.fillStyle = '#8fb0c6'; ctx.font = '11px sans-serif'; ctx.textAlign = 'left'; ctx.fillText('1 carreau = 1 NM', 8, h - 10);
+  // toponymes
+  const place = (wx, wy, txt, col) => {
+    const [px, py] = toScreen(wx, wy);
+    if (px < -20 || px > w + 20 || py < 0 || py > h) return;
+    ctx.fillStyle = col; ctx.font = 'bold 11px sans-serif'; ctx.textAlign = 'center';
+    ctx.fillText(txt, px, py);
+  };
+  // marqueur du port
+  const [hx, hy] = toScreen(0, 0);
+  if (hx > -20 && hx < w + 20 && hy > -20 && hy < h + 20) {
+    ctx.fillStyle = '#ffd166'; ctx.fillRect(hx - 3, hy - 3, 6, 6);
+  }
+  place(-160, 0, "L'Estartit", '#f0e6c0');
+  place(1180, -120, 'Illes Medes', '#e6f0c0');
+  place(420, 1500, 'Montgrí · Cap de la Barra', '#e6f0c0');
+  place(-260, -1700, 'Platja de Pals', '#f0e6c0');
+
+  ctx.fillStyle = '#8fb0c6'; ctx.font = '11px sans-serif'; ctx.textAlign = 'left'; ctx.fillText('1 carreau = 1 NM · ' + REGION.name, 8, h - 10);
 }
 function drawCornerArrow(ctx, x, y, dirTo, color, label) {
   ctx.save(); ctx.translate(x, y);
@@ -784,6 +863,21 @@ $('timeSeg').addEventListener('click', e => {
 $('pauseBtn').onclick = () => { S.running = !S.running; $('pauseBtn').textContent = S.running ? '⏸ Pause' : '▶ Reprendre'; };
 $('soundBtn').onclick = () => Sound.enable();
 
+// Plein écran
+$('fsBtn').onclick = () => {
+  const el = document.documentElement;
+  const fsEl = document.fullscreenElement || document.webkitFullscreenElement;
+  if (!fsEl) (el.requestFullscreen || el.webkitRequestFullscreen || (() => {})).call(el);
+  else (document.exitFullscreen || document.webkitExitFullscreen || (() => {})).call(document);
+};
+function onFsChange() {
+  const on = !!(document.fullscreenElement || document.webkitFullscreenElement);
+  $('fsBtn').textContent = on ? '⛶ Quitter' : '⛶ Plein écran';
+  $('fsBtn').classList.toggle('active', on);
+}
+document.addEventListener('fullscreenchange', onFsChange);
+document.addEventListener('webkitfullscreenchange', onFsChange);
+
 $('weatherSeg').addEventListener('click', e => {
   if (e.target.tagName !== 'BUTTON') return;
   [...$('weatherSeg').children].forEach(b => b.classList.remove('active'));
@@ -819,7 +913,11 @@ document.querySelectorAll('.preset').forEach(btn => {
     S.reef = sugg; $('reef').value = sugg; $('oReef').textContent = sugg + ' ris';
   };
 });
-$('resetBtn').onclick = () => { S.x = 0; S.y = 0; S.stw = 0; S.heel = 0; S.trail = []; S.aground = false; };
+$('resetBtn').onclick = () => {
+  S.x = START.x; S.y = START.y; S.heading = START.heading; S.autohelmHeading = START.heading;
+  S.stw = 0; S.heel = 0; S.trail = []; S.aground = false; S.rudder = 0; S.rudderCmd = 0;
+  $('rudder').value = 0; $('oRudder').textContent = '0°';
+};
 
 $('zoomIn').onclick = () => S.chartScale = clamp(S.chartScale * 1.4, 0.01, 0.4);
 $('zoomOut').onclick = () => S.chartScale = clamp(S.chartScale / 1.4, 0.01, 0.4);

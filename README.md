@@ -27,6 +27,28 @@ Aucune installation : ouvre simplement **`index.html`** dans un navigateur
 | **Sonde** | Bathymétrie + haut-fond, hauteur de marée, **alarme d'échouement** (TE 1,95 m). |
 | **Navigation** | Waypoint cliquable, route, distance/relèvement, **VMG**, pilote auto. |
 
+## Zone de navigation : L'Estartit — Îles Medes
+
+Le plan d'eau reproduit (de façon stylisée mais reconnaissable) la côte de
+**L'Estartit** sur la Costa Brava méditerranéenne :
+
+- **Massif du Montgrí / Cap de la Barra** au nord, qui avance vers le large ;
+- longue **plage de Pals** sablonneuse au sud (baie concave) ;
+- **archipel des Îles Medes** au large à l'est (Meda Gran, Meda Petita + cailloux) ;
+- profondeurs qui s'enfoncent vers le large, **échouement** sur la terre et les
+  hauts-fonds, toponymes et marqueur du port sur la carte ;
+- **silhouette de la côte** dessinée sur l'horizon dans la vue à bord ;
+- réglages par défaut **méditerranéens** : marée faible (~0,5 m), Tramontane
+  de secteur nord-ouest. Tous restent modifiables (n'importe quel vent / mer /
+  marée / météo via les curseurs et scénarios).
+
+Le bateau démarre à la sortie du port, cap au large, waypoint placé près des Medes.
+
+## Plein écran
+
+Bouton **⛶ Plein écran** dans la barre du haut (bascule entrée/sortie). Pratique
+sur tablette ou pour une vue immersive sur ordinateur.
+
 ## Vue à bord, leçons et son
 
 - **Vue à bord (horizon)** : perspective du barreur, **horizon qui s'incline** avec la gîte et tangue avec la houle, voiles visibles (et qui faseyent dans le no-go), bandeau de cap et girouette de vent apparent. Le décor change avec la météo.

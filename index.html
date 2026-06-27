@@ -12,7 +12,7 @@
       <span class="logo">⛵</span>
       <div>
         <h1>Simulateur de voile</h1>
-        <p class="sub">Croiseur 11 m — sloop (GV + génois)</p>
+        <p class="sub">Croiseur 11 m · Zone : L'Estartit — Îles Medes (Méditerranée)</p>
       </div>
     </div>
     <div class="topbar-status">
@@ -30,6 +30,7 @@
           <button data-t="1800">×1800</button>
         </div>
       </div>
+      <button id="fsBtn" class="btn">⛶ Plein écran</button>
       <button id="soundBtn" class="btn">🔇 Son</button>
       <button id="pauseBtn" class="btn">⏸ Pause</button>
     </div>
@@ -156,20 +157,20 @@
       </div>
 
       <div class="ctrl">
-        <label>Direction du vent (d'où il vient) <output id="oWindDir">270°</output></label>
-        <input id="windDir" type="range" min="0" max="359" value="270" step="1" />
+        <label>Direction du vent (d'où il vient) <output id="oWindDir">340°</output></label>
+        <input id="windDir" type="range" min="0" max="359" value="340" step="1" />
       </div>
       <div class="ctrl">
-        <label>Force du vent réel <output id="oWindSpd">12 nds</output></label>
-        <input id="windSpd" type="range" min="0" max="55" value="12" step="1" />
+        <label>Force du vent réel <output id="oWindSpd">14 nds</output></label>
+        <input id="windSpd" type="range" min="0" max="55" value="14" step="1" />
       </div>
       <div class="ctrl">
         <label>Rafales (variabilité) <output id="oGust">moyenne</output></label>
-        <input id="gust" type="range" min="0" max="100" value="25" step="1" />
+        <input id="gust" type="range" min="0" max="100" value="30" step="1" />
       </div>
       <div class="ctrl">
-        <label>État de la mer (échelle Douglas 0–9) <output id="oSea">3 — peu agitée</output></label>
-        <input id="sea" type="range" min="0" max="9" value="3" step="1" />
+        <label>État de la mer (échelle Douglas 0–9) <output id="oSea">2 — belle</output></label>
+        <input id="sea" type="range" min="0" max="9" value="2" step="1" />
       </div>
 
       <div class="ctrl">
@@ -184,16 +185,16 @@
       </div>
 
       <div class="ctrl">
-        <label>Amplitude de marée <output id="oTideRange">3.0 m</output></label>
-        <input id="tideRange" type="range" min="0" max="12" value="3" step="0.5" />
+        <label>Amplitude de marée <output id="oTideRange">0.5 m</output></label>
+        <input id="tideRange" type="range" min="0" max="12" value="0.5" step="0.5" />
       </div>
       <div class="ctrl">
-        <label>Phase de marée <output id="oTidePhase">mi-marée montante</output></label>
-        <input id="tidePhase" type="range" min="0" max="100" value="25" step="1" />
+        <label>Phase de marée <output id="oTidePhase">pleine mer (étale)</output></label>
+        <input id="tidePhase" type="range" min="0" max="100" value="50" step="1" />
       </div>
       <div class="ctrl">
-        <label>Courant max de marée <output id="oCurMax">1.5 nds</output></label>
-        <input id="curMax" type="range" min="0" max="6" value="1.5" step="0.1" />
+        <label>Courant max de marée <output id="oCurMax">0.4 nds</output></label>
+        <input id="curMax" type="range" min="0" max="6" value="0.4" step="0.1" />
       </div>
 
       <button id="resetBtn" class="btn wide ghost">↺ Réinitialiser la position</button>
