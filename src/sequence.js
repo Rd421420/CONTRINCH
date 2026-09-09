@@ -37,6 +37,21 @@ const ETAPE = {
 const SITUATIONS = { 1: 'cdi', 2: 'cdd', 3: 'independant', 4: 'retraite', 5: 'etudiant', 6: 'autre' };
 const GARANTIES = { 1: 'caution', 2: 'visale', 3: 'aucune', 4: 'autre' };
 
+/**
+ * Les créneaux proposés reviennent de la base en chaînes ISO, alors que
+ * ceux que le module de créneaux vient de calculer sont des `Date`. Tout
+ * ce qui sort d'ici doit être des `Date` : le message de confirmation et
+ * l'écriture dans l'agenda en dépendent.
+ */
+function versInstant(valeur) {
+  return valeur instanceof Date ? valeur : T.depuisIso(String(valeur));
+}
+
+function normaliserCreneau(creneau) {
+  if (!creneau) return null;
+  return { ...creneau, debut: versInstant(creneau.debut), fin: versInstant(creneau.fin) };
+}
+
 /** Ce que le calculateur d'éligibilité attend, à partir de la fiche et du lot. */
 function versEntreeEligibilite(candidat, lot) {
   return {
@@ -328,7 +343,7 @@ const ETAPES = {
       });
     }
 
-    const creneau = (contexte.creneauxProposes || [])[choix === 'A' ? 0 : 1];
+    const creneau = normaliserCreneau((contexte.creneauxProposes || [])[choix === 'A' ? 0 : 1]);
     if (!creneau) return versArbitrage('creneau_introuvable');
 
     // Vérification systématique AVANT écriture : le blocage en base ne

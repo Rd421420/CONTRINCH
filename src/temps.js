@@ -95,11 +95,24 @@ function heureDecimale(reference) {
   return c.heures + c.minutes / 60 + c.secondes / 3600;
 }
 
-/** Analyse « 2026-09-09 » ou « 2026-09-09T14:00 » en heure de Paris. */
+/**
+ * Analyse une date ISO.
+ *
+ * Deux cas, et les confondre fausse tout d'une à deux heures :
+ *   — « 2026-09-09T14:00:00+02:00 » ou « …Z » porte son propre décalage,
+ *     c'est un instant absolu (Google Agenda renvoie toujours cette forme) ;
+ *   — « 2026-09-09 » ou « 2026-09-09T14:00 » n'en porte pas, c'est une
+ *     heure murale, donc parisienne ici.
+ */
 function depuisIso(texte) {
-  const m = String(texte).match(
-    /^(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{2}):(\d{2})(?::(\d{2}))?)?/,
-  );
+  const brut = String(texte);
+  if (/[+-]\d{2}:?\d{2}$|Z$/.test(brut)) {
+    const absolu = new Date(brut);
+    if (Number.isNaN(absolu.getTime())) throw new TypeError(`Date illisible : ${texte}`);
+    return absolu;
+  }
+
+  const m = brut.match(/^(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{2}):(\d{2})(?::(\d{2}))?)?/);
   if (!m) throw new TypeError(`Date illisible : ${texte}`);
   return instant(+m[1], +m[2], +m[3], +(m[4] || 0), +(m[5] || 0), +(m[6] || 0));
 }

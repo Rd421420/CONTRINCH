@@ -11,8 +11,17 @@
  * pas », l'article 22 du RGPD redeviendrait applicable (§7).
  */
 
-/** Lien vers la mention d'information, sous une URL de la marque. */
-const URL_MENTION = process.env.URL_MENTION_INFORMATION || 'https://era-dupontromain.fr/donnees';
+/**
+ * Lien vers la mention d'information, sous une URL de la marque — les
+ * raccourcisseurs génériques passent mal les filtres opérateurs français.
+ *
+ * `process` n'existe pas dans le bac à sable des nodes Code de n8n : la
+ * lecture est donc gardée, sinon le module ne se charge pas du tout une
+ * fois empaqueté.
+ */
+const URL_MENTION =
+  (typeof process !== 'undefined' && process.env && process.env.URL_MENTION_INFORMATION) ||
+  'https://era-dupontromain.fr/donnees';
 
 const MENTION_RGPD =
   `Vos données servent uniquement à l'étude de votre demande (ERA Dupont Romain, ` +
@@ -29,7 +38,8 @@ const JOURS = ['dimanche', 'lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 's
 function libelleCreneau(creneau, temps) {
   const c = temps.champs(creneau.debut);
   const minutes = c.minutes ? `h${String(c.minutes).padStart(2, '0')}` : 'h';
-  return `${JOURS[c.jourSemaine]} ${c.jour}/${String(c.mois).padStart(2, '0')} à ${c.heures}${minutes}`;
+  const jour = String(c.jour).padStart(2, '0');
+  return `${JOURS[c.jourSemaine]} ${jour}/${String(c.mois).padStart(2, '0')} à ${c.heures}${minutes}`;
 }
 
 const messages = {

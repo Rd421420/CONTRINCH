@@ -51,6 +51,8 @@ function textes(trace) {
   return trace.flatMap((e) => e.envois.map((x) => x.type));
 }
 
+const CANDIDAT_RDV = { etape_sms: ETAPE.CRENEAU, statut: 'en_cours', verdict: 'eligible' };
+
 test('parcours nominal CDI sans garantie : verdict favorable puis rendez-vous posé', () => {
   const { candidat, trace } = conversation(['1', '3', '2500', '0', 'A']);
 
@@ -224,4 +226,19 @@ test('aucun message envoyé au candidat n’annonce un refus', () => {
       );
     }
   }
+});
+
+test('les créneaux relus en base arrivent en chaînes ISO, pas en objets Date', () => {
+  // Régression : la confirmation plantait sur « Invalid time value » au
+  // moment exact où le rendez-vous devait être posé.
+  const candidat = { ...CANDIDAT_RDV };
+  const proposesIso = [
+    { debut: '2026-09-09T14:00:00+02:00', fin: '2026-09-09T14:30:00+02:00' },
+    { debut: '2026-09-09T16:00:00+02:00', fin: '2026-09-09T16:30:00+02:00' },
+  ];
+
+  const etape = traiterReponse(candidat, 'A', contexte({ creneauxProposes: proposesIso }));
+  assert.equal(etape.patch.statut, 'rdv_pose');
+  assert.ok(etape.creneauRetenu.debut instanceof Date);
+  assert.match(etape.envois[0].texte, /mercredi 09\/09 à 14h/);
 });

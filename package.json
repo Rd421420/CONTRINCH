@@ -5,10 +5,14 @@
   "private": true,
   "type": "commonjs",
   "main": "src/index.js",
-  "engines": { "node": ">=20" },
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "test": "node --test test/",
-    "jours-feries": "node scripts/charger-jours-feries.js"
+    "jours-feries": "node scripts/charger-jours-feries.js",
+    "n8n:build": "node n8n/build.js",
+    "n8n:verifier": "node n8n/build.js --verifier"
   },
   "license": "UNLICENSED"
 }

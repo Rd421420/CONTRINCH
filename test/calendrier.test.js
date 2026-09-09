@@ -89,3 +89,21 @@ test('le changement d’heure ne décale pas l’heure murale', () => {
   assert.equal(T.isoJour(avant), '2026-10-26');
   assert.equal(T.heureDecimale(avant), 10);
 });
+
+test('une date ISO absolue est lue comme un instant, pas comme une heure murale', () => {
+  // Google Agenda renvoie toujours le décalage. Le confondre avec une heure
+  // murale décalerait chaque événement d'une à deux heures.
+  const absolu = T.depuisIso('2026-09-09T14:00:00+02:00');
+  assert.equal(absolu.toISOString(), '2026-09-09T12:00:00.000Z');
+  assert.equal(T.heureDecimale(absolu), 14);
+
+  const zoulou = T.depuisIso('2026-09-09T12:00:00Z');
+  assert.equal(zoulou.getTime(), absolu.getTime());
+
+  // Sans décalage, c'est une heure murale parisienne.
+  const mural = T.depuisIso('2026-09-09T14:00');
+  assert.equal(mural.toISOString(), '2026-09-09T12:00:00.000Z');
+
+  // En hiver, la même heure murale est un autre instant.
+  assert.equal(T.depuisIso('2026-01-15T14:00').toISOString(), '2026-01-15T13:00:00.000Z');
+});

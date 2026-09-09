@@ -15,5 +15,6 @@ module.exports = {
   messages: require('./messages'),
   creneaux: require('./creneaux'),
   sequence: require('./sequence'),
+  justificatifs: require('./justificatifs'),
   ...require('./eligibilite'),
 };

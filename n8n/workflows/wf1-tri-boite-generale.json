@@ -1,0 +1,317 @@
+{
+  "name": "ERA · WF-1 · Tri de la boîte générale",
+  "nodes": [
+    {
+      "parameters": {
+        "pollTimes": {
+          "item": [
+            {
+              "mode": "everyX",
+              "value": 10,
+              "unit": "minutes"
+            }
+          ]
+        },
+        "simple": false,
+        "filters": {
+          "readStatus": "unread"
+        },
+        "options": {
+          "downloadAttachments": false
+        }
+      },
+      "id": "206dfece-f7a5-4b30-a798-447ef77e8ac7",
+      "name": "Boîte générale",
+      "type": "n8n-nodes-base.gmailTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -260,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// ─── À RENSEIGNER APRÈS L'IMPORT ────────────────────────────────────\n// Seul node à modifier : tout le reste du workflow lit ces valeurs.\n//\n// Le node est traversant — il recopie ses items d'entrée en y ajoutant\n// les paramètres — pour ne pas écraser les items du déclencheur.\nconst PARAMETRES = {\n  // Numéro long code français acheté chez Twilio, au format E.164.\n  expediteur: '+33600000000',\n\n  // Identifiant de la conversation Telegram — destinataire UNIQUE.\n  // Les conseillers ne reçoivent rien (cahier des charges §6, WF-5 bis).\n  chat_id: '000000000',\n\n  // Agenda principal de Romain — celui qui porte aussi le sport et le BNI.\n  agenda: 'primary',\n\n  // Boîte dédiée au dépôt des pièces, distincte de la boîte générale.\n  mail_pieces: 'pieces@era-dupontromain.fr',\n\n  // Ollama sur le VPS. Ne JAMAIS pointer un modèle « :cloud » ici :\n  // le texte contient nom, revenus et situation d'un candidat.\n  ollama: 'http://127.0.0.1:11434/api/generate',\n  modele: 'qwen2.5:3b-instruct-q4_K_M',\n};\n\nconst entree = $input.all();\nreturn (entree.length ? entree : [{ json: {} }])\n  .map((item) => ({ json: { ...item.json, ...PARAMETRES } }));"
+      },
+      "id": "d396d855-eef6-46f9-ab1a-2d6298136b3b",
+      "name": "Paramètres",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -40,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Premier filtre, sans IA : expéditeurs connus et mots-clés du formulaire.\n// Il n'a pas à être fin — il est là pour éviter d'envoyer au modèle les\n// newsletters, les factures et les relances de syndic.\nconst EXPEDITEURS = [\n  'seloger', 'leboncoin', 'bienici', 'bien-ici', 'pap.fr',\n  'logic-immo', 'figaroimmo', 'avendrealouer', 'era-immobilier',\n];\nconst MOTS_CLES = [\n  'demande de visite', 'souhaite visiter', 'visiter', 'visite',\n  'votre annonce', 'reference', 'référence', 'toujours disponible',\n  'formulaire de contact', 'demande de renseignement',\n];\n\nfunction texteDe(mail) {\n  return String(mail.text || mail.textPlain || mail.snippet || mail.html || '')\n    .replace(/<[^>]+>/g, ' ')\n    .replace(/\\s+/g, ' ')\n    .trim();\n}\n\nfunction adresseDe(mail) {\n  const brut = mail.from && mail.from.value ? mail.from.value[0] : null;\n  return String((brut && brut.address) || mail.from || mail.From || '').toLowerCase();\n}\n\nconst sortie = [];\nfor (const item of $input.all()) {\n  const mail = item.json;\n  const expediteur = adresseDe(mail);\n  const sujet = String(mail.subject || '').toLowerCase();\n  const corps = texteDe(mail);\n  const recherche = `${sujet} ${corps}`.toLowerCase();\n\n  const connu = EXPEDITEURS.some((e) => expediteur.includes(e));\n  const evocateur = MOTS_CLES.some((m) => recherche.includes(m));\n  if (!connu && !evocateur) continue;\n\n  // Le modèle ne voit que ça : le corps du message, tronqué.\n  const extrait = corps.slice(0, 2000);\n\n  sortie.push({\n    json: {\n      ...mail,\n      expediteur_mail: expediteur,\n      sujet_mail: mail.subject || '',\n      corps_mail: extrait,\n      invite: [\n        \"Tu analyses un message reçu par une agence immobilière.\",\n        \"Réponds UNIQUEMENT en JSON, sans commentaire, avec ces clés :\",\n        '{\"demande_visite\": true|false, \"reference\": string|null, \"nom\": string|null, \"mobile\": string|null, \"email\": string|null}',\n        \"demande_visite vaut true seulement s'il s'agit d'une demande de visite d'un bien à louer.\",\n        \"reference est la référence du bien citée dans le message, sinon null.\",\n        \"mobile est un numéro de téléphone français, chiffres uniquement.\",\n        \"N'invente aucune valeur : mets null si l'information est absente.\",\n        '',\n        'Message :',\n        extrait,\n      ].join('\\n'),\n    },\n  });\n}\nreturn sortie;"
+      },
+      "id": "a1d22480-ade3-4adf-aa23-40f501d81783",
+      "name": "Filtre expéditeurs et mots-clés",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        180,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.ollama }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: $json.modele, prompt: $json.invite, format: \"json\", stream: false, options: { temperature: 0 } }) }}",
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "id": "979d5c98-d7e1-4b85-a0f0-4e86d854d9fc",
+      "name": "Ollama — est-ce une demande de visite ?",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        400,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Sortie JSON stricte du modèle. Toute réponse illisible est ignorée :\n// un mail non trié reste dans la boîte, ce qui est le comportement voulu.\nconst sortie = [];\nconst items = $input.all();\n\nfor (let i = 0; i < items.length; i += 1) {\n  let source;\n  try {\n    source = $('Filtre expéditeurs et mots-clés').itemMatching(i).json;\n  } catch (e) {\n    source = $('Filtre expéditeurs et mots-clés').all()[i].json;\n  }\n\n  let lu = null;\n  try {\n    lu = JSON.parse(String(items[i].json.response || '{}'));\n  } catch (e) {\n    continue;\n  }\n  if (!lu || lu.demande_visite !== true) continue;\n\n  const mobile = String(lu.mobile || '').replace(/\\D/g, '');\n  sortie.push({\n    json: {\n      expediteur: source.expediteur,\n      chat_id: source.chat_id,\n      source: (source.expediteur_mail || '').split('@')[1] || 'autre',\n      nom: lu.nom || null,\n      // Le numéro français est ramené au format E.164 attendu par Twilio.\n      mobile: mobile ? (mobile.startsWith('33') ? `+${mobile}` : `+33${mobile.replace(/^0/, '')}`) : null,\n      email: lu.email || null,\n      // La virgule est retirée : elle sert de séparateur aux paramètres SQL\n      // de n8n, et une référence qui en contient décalerait la requête.\n      reference: lu.reference ? String(lu.reference).replace(/,/g, ' ').trim() : null,\n      sujet_mail: source.sujet_mail,\n    },\n  });\n}\nreturn sortie;"
+      },
+      "id": "54458a33-6f3c-4d60-a4c7-d474bfc64e9c",
+      "name": "Lire la réponse du modèle",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        620,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- Aucune clause FROM : la requête renvoie toujours exactement une\n-- ligne par item d'entrée, avec `lot` à NULL si rien ne correspond.\nSELECT (\n  SELECT row_to_json(l)\n  FROM locatif.lots l\n  WHERE l.reference = $1::text AND l.statut = 'disponible'\n) AS lot;",
+        "options": {
+          "queryReplacement": "={{ $json.reference }}"
+        }
+      },
+      "id": "51a233b8-909e-4384-a6cb-242877bfbc83",
+      "name": "Retrouver le lot",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [
+        840,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Le lot est renvoyé en colonne JSON par la requête précédente : elle\n// produit toujours exactement une ligne, même sans correspondance, ce qui\n// préserve l'appariement avec les items d'entrée.\nconst sortie = [];\nconst items = $input.all();\n\nfor (let i = 0; i < items.length; i += 1) {\n  let extrait;\n  try {\n    extrait = $('Lire la réponse du modèle').itemMatching(i).json;\n  } catch (e) {\n    extrait = $('Lire la réponse du modèle').all()[i].json;\n  }\n  const lot = items[i].json.lot;\n\n  // Sans référence connue ou sans mobile, la séquence SMS ne peut pas\n  // démarrer. Le dossier part en arbitrage plutôt que d'échouer en base\n  // sur la clé étrangère ref_lot.\n  if (!lot || !extrait.mobile) {\n    sortie.push({\n      json: {\n        __action: 'telegram',\n        chat_id: extrait.chat_id,\n        texte: [\n          '<b>Demande de visite non rattachée</b>',\n          `Référence lue : ${extrait.reference || '—'}`,\n          `Nom : ${extrait.nom || '—'}`,\n          `Mobile : ${extrait.mobile || '— (absent)'}`,\n          `Objet : ${extrait.sujet_mail || '—'}`,\n          '',\n          lot ? 'Mobile manquant.' : 'Aucun lot disponible ne porte cette référence.',\n        ].join('\\n'),\n      },\n    });\n    continue;\n  }\n\n  sortie.push({\n    json: {\n      __action: 'candidat',\n      source: extrait.source,\n      nom: extrait.nom,\n      mobile: extrait.mobile,\n      email: extrait.email,\n      ref_lot: lot.reference,\n      statut: 'nouveau',\n      // Purge à 30 jours dès l'écriture : une fiche sans suite ne doit pas\n      // dépendre d'un workflow pour disparaître.\n      purge_le: new Date(Date.now() + 30 * 86400000).toISOString(),\n    },\n  });\n}\nreturn sortie;"
+      },
+      "id": "74044932-ecfa-4bce-aa0d-b0e6940a8ee9",
+      "name": "Préparer la fiche",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1060,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Sépare la branche « candidat ». Un node Code qui ne renvoie aucun item\n// arrête sa branche : c'est ce qui remplace ici un node IF.\nreturn $input.all()\n  .filter((item) => item.json.__action === 'candidat')\n  .map((item) => {\n    const { __action, ...reste } = item.json;\n    return { json: reste };\n  });"
+      },
+      "id": "3b68ba60-9307-453b-aa8f-9b9e1c5353c1",
+      "name": "Branche — nouveau candidat",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1280,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "schema": {
+          "__rl": true,
+          "value": "locatif",
+          "mode": "name"
+        },
+        "table": {
+          "__rl": true,
+          "value": "candidats",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "matchingColumns": [],
+          "schema": []
+        },
+        "options": {}
+      },
+      "id": "1e28494f-78d5-4c09-af4c-ad408d906220",
+      "name": "Créer le candidat",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [
+        1500,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Sépare la branche « telegram ». Un node Code qui ne renvoie aucun item\n// arrête sa branche : c'est ce qui remplace ici un node IF.\nreturn $input.all()\n  .filter((item) => item.json.__action === 'telegram')\n  .map((item) => {\n    const { __action, ...reste } = item.json;\n    return { json: reste };\n  });"
+      },
+      "id": "f4feeee6-f385-4489-a898-d5d80bfd97c8",
+      "name": "Branche — arbitrage",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1280,
+        420
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "sendMessage",
+        "chatId": "={{ $json.chat_id }}",
+        "text": "={{ $json.texte }}",
+        "additionalFields": {
+          "appendAttribution": false,
+          "parse_mode": "HTML"
+        }
+      },
+      "id": "f5ff9c9f-d8aa-4bc7-a1af-391d3b41f2a2",
+      "name": "Prévenir sur Telegram",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1500,
+        420
+      ]
+    }
+  ],
+  "connections": {
+    "Boîte générale": {
+      "main": [
+        [
+          {
+            "node": "Paramètres",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Paramètres": {
+      "main": [
+        [
+          {
+            "node": "Filtre expéditeurs et mots-clés",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filtre expéditeurs et mots-clés": {
+      "main": [
+        [
+          {
+            "node": "Ollama — est-ce une demande de visite ?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ollama — est-ce une demande de visite ?": {
+      "main": [
+        [
+          {
+            "node": "Lire la réponse du modèle",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lire la réponse du modèle": {
+      "main": [
+        [
+          {
+            "node": "Retrouver le lot",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Retrouver le lot": {
+      "main": [
+        [
+          {
+            "node": "Préparer la fiche",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Préparer la fiche": {
+      "main": [
+        [
+          {
+            "node": "Branche — nouveau candidat",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Branche — arbitrage",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Branche — nouveau candidat": {
+      "main": [
+        [
+          {
+            "node": "Créer le candidat",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Branche — arbitrage": {
+      "main": [
+        [
+          {
+            "node": "Prévenir sur Telegram",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "timezone": "Europe/Paris"
+  },
+  "pinData": {},
+  "meta": {
+    "description": "Trie la boîte générale toutes les 10 minutes, extrait la demande de visite avec un modèle local et crée la fiche candidat."
+  },
+  "tags": [
+    {
+      "name": "ERA · pré-étude"
+    }
+  ]
+}
