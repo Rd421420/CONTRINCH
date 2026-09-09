@@ -188,7 +188,36 @@ Garde-le : c'est le `chat_id` de l'étape 7.
 
 ## Étape 6 — Importer les workflows
 
-Dans n8n : **Workflows → Import from File**, un fichier à la fois.
+Deux voies. La première est plus rapide et supprime le relien manuel.
+
+### Voie A — par l'API (recommandée)
+
+Dans n8n : **Settings → API → Create an API key**. Puis, sur ta machine :
+
+```bash
+export N8N_URL=https://ton-n8n.fr
+export N8N_API_KEY=...
+
+node scripts/importer-workflows.js --essai   # montre sans rien écrire
+node scripts/importer-workflows.js           # importe
+```
+
+La clé ne quitte pas ta machine : le script parle directement à ton n8n.
+
+Il est **idempotent** : relancé, il met à jour les workflows existants au
+lieu d'en créer des doublons. C'est ce qui permet de le rejouer après chaque
+`npm run n8n:build`, sans repasser par l'interface.
+
+Il **n'active rien** et **ne rattache aucun identifiant** : l'activation est
+une décision, et l'API publique de n8n ne sait pas lister les identifiants
+existants. Ces deux points restent à faire à la main, plus bas.
+
+Il fait en revanche le relien de WF-7 vers WF-5, que l'import par fichier ne
+sait pas faire — voir plus bas pourquoi.
+
+### Voie B — par l'interface
+
+**Workflows → Import from File**, un fichier à la fois.
 
 **L'ordre compte** : WF-7 appelle WF-5, qui doit donc exister avant.
 
@@ -217,7 +246,7 @@ SMTP affichent « Credentials not set ». Ouvre chaque node concerné et
 sélectionne l'identifiant créé à l'étape 4. n8n mémorise ton choix et le
 proposera par défaut ensuite.
 
-### Un relien à faire à la main
+### Un relien à faire à la main — voie B seulement
 
 Dans **WF-7**, ouvre le node **« Lancer WF-5 »** et re-sélectionne
 `ERA · WF-5 · Demande de pièces` dans la liste déroulante.
@@ -226,6 +255,9 @@ La raison : n8n référence un sous-workflow par son identifiant interne, qui
 n'existe pas avant l'import. Le fichier porte le nom du workflow, ce qui
 suffit à te dire lequel choisir, mais pas à établir le lien. C'est le seul
 endroit du dispositif où ça se produit.
+
+**La voie A le fait pour toi** : le script connaît l'identifiant de WF-5 au
+moment où il envoie WF-7, et le substitue au nom.
 
 ---
 

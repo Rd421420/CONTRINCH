@@ -10,8 +10,9 @@ dans le secteur. **Il ne sélectionne pas** : tout dossier non favorable part en
 arbitrage humain, et c'est Romain qui décide puis qui écrit au candidat.
 
 ```
-npm test            # 127 tests, aucune dépendance externe
+npm test            # 134 tests, aucune dépendance externe
 npm run n8n:build   # régénère les 12 workflows n8n depuis src/
+npm run n8n:importer -- --essai   # les pousse dans n8n par son API
 ```
 
 Node 20 ou plus. Aucun `node_modules` : tout tourne sur la bibliothèque standard.
