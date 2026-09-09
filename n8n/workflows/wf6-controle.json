@@ -1,0 +1,147 @@
+{
+  "name": "ERA · WF-6 · Contrôle quotidien",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 8 * * 1-5"
+            }
+          ]
+        }
+      },
+      "id": "83349e29-c488-4a53-a90a-705a6b8fec15",
+      "name": "Chaque jour ouvré à 8 h",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -480,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// ─── À RENSEIGNER APRÈS L'IMPORT ────────────────────────────────────\n// Seul node à modifier : tout le reste du workflow lit ces valeurs.\n//\n// Le node est traversant — il recopie ses items d'entrée en y ajoutant\n// les paramètres — pour ne pas écraser les items du déclencheur.\nconst PARAMETRES = {\n  // Numéro long code français acheté chez Twilio, au format E.164.\n  expediteur: '+33600000000',\n\n  // Identifiant de la conversation Telegram — destinataire UNIQUE.\n  // Les conseillers ne reçoivent rien (cahier des charges §6, WF-5 bis).\n  chat_id: '000000000',\n\n  // Agenda principal de Romain — celui qui porte aussi le sport et le BNI.\n  agenda: 'primary',\n\n  // Boîte dédiée au dépôt des pièces, distincte de la boîte générale.\n  mail_pieces: 'pieces@era-dupontromain.fr',\n\n  // Ollama sur le VPS. Ne JAMAIS pointer un modèle « :cloud » ici :\n  // le texte contient nom, revenus et situation d'un candidat.\n  ollama: 'http://127.0.0.1:11434/api/generate',\n  modele: 'qwen2.5:3b-instruct-q4_K_M',\n};\n\nconst entree = $input.all();\nreturn (entree.length ? entree : [{ json: {} }])\n  .map((item) => ({ json: { ...item.json, ...PARAMETRES } }));"
+      },
+      "id": "331fefdb-9187-4845-af9a-850050227c42",
+      "name": "Paramètres",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -260,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT\n  -- Preuve d'exécution de la purge : c'est ce qu'on montre en cas de contrôle.\n  (SELECT max(horodatage) FROM locatif.purge_log) AS derniere_purge,\n\n  -- Fiches dont la date de purge est dépassée : si ce nombre grimpe, la\n  -- ligne de crontab ne tourne plus.\n  (SELECT count(*) FROM locatif.candidats\n   WHERE purge_le IS NOT NULL AND purge_le < now() AND statut <> 'retenu') AS a_purger,\n\n  -- Messages bloqués en file : Twilio en panne, ou numéro invalide.\n  (SELECT count(*) FROM locatif.file_sms\n   WHERE envoye_le IS NULL AND tentatives >= 5) AS sms_en_echec,\n\n  -- File d'attente anormalement longue.\n  (SELECT count(*) FROM locatif.file_sms\n   WHERE envoye_le IS NULL AND envoyer_apres < now() - INTERVAL '12 hours') AS sms_en_retard,\n\n  -- Jours fériés : le référentiel se recharge une fois par an. S'il ne\n  -- couvre plus l'année en cours, le J+2 et le compteur de 2 h dérivent.\n  (SELECT max(jour) FROM locatif.jours_feries) AS dernier_ferie,\n\n  -- Pièces demandées sans retour depuis 48 h.\n  (SELECT COALESCE(json_agg(json_build_object('id', id, 'nom', nom)), '[]'::json)\n   FROM locatif.candidats\n   WHERE pieces_demandees_le < now() - INTERVAL '48 hours'\n     AND pieces_recues_le IS NULL) AS pieces_en_attente;",
+        "options": {}
+      },
+      "id": "3ff5d45e-78ee-4037-ac99-5f05fc9197b1",
+      "name": "État du dispositif",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [
+        -40,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const parametres = $('Paramètres').first().json;\nconst etat = $input.first().json;\nconst alertes = [];\n\nconst derniere = etat.derniere_purge ? new Date(etat.derniere_purge) : null;\nconst heures = derniere ? (Date.now() - derniere.getTime()) / 3600000 : null;\n\nif (!derniere) {\n  alertes.push('• La purge n’a jamais tourné — vérifier la ligne de crontab.');\n} else if (heures > 36) {\n  alertes.push(`• Dernière purge il y a ${Math.round(heures)} h — la crontab ne tourne plus.`);\n}\n\nif (Number(etat.a_purger) > 0) {\n  alertes.push(`• ${etat.a_purger} fiche(s) auraient dû être purgées.`);\n}\nif (Number(etat.sms_en_echec) > 0) {\n  alertes.push(`• ${etat.sms_en_echec} SMS abandonnés après 5 tentatives.`);\n}\nif (Number(etat.sms_en_retard) > 0) {\n  alertes.push(`• ${etat.sms_en_retard} SMS en file depuis plus de 12 h.`);\n}\n\nconst dernierFerie = etat.dernier_ferie ? String(etat.dernier_ferie).slice(0, 4) : null;\nif (!dernierFerie || Number(dernierFerie) < new Date().getFullYear()) {\n  alertes.push('• Table des jours fériés périmée — relancer scripts/charger-jours-feries.js.');\n}\n\nconst pieces = etat.pieces_en_attente || [];\nif (pieces.length) {\n  alertes.push(\n    `• ${pieces.length} dossier(s) sans pièces depuis 48 h : ` +\n    pieces.map((p) => `${p.nom || 'sans nom'} (#${p.id})`).join(', '),\n  );\n}\n\n// Silence quand tout va bien : une alerte quotidienne qui dit « rien à\n// signaler » finit par ne plus être lue.\nif (!alertes.length) return [];\n\nreturn [{\n  json: {\n    chat_id: parametres.chat_id,\n    texte: ['<b>Contrôle quotidien</b>', '', ...alertes].join('\\n'),\n  },\n}];"
+      },
+      "id": "e7b79ad5-150a-4365-a132-d438c4bde655",
+      "name": "Alertes",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        180,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "sendMessage",
+        "chatId": "={{ $json.chat_id }}",
+        "text": "={{ $json.texte }}",
+        "additionalFields": {
+          "appendAttribution": false,
+          "parse_mode": "HTML"
+        }
+      },
+      "id": "43d57e99-d8a8-4709-adfb-0ba9d43b505a",
+      "name": "Prévenir sur Telegram",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        400,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Chaque jour ouvré à 8 h": {
+      "main": [
+        [
+          {
+            "node": "Paramètres",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Paramètres": {
+      "main": [
+        [
+          {
+            "node": "État du dispositif",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "État du dispositif": {
+      "main": [
+        [
+          {
+            "node": "Alertes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Alertes": {
+      "main": [
+        [
+          {
+            "node": "Prévenir sur Telegram",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "timezone": "Europe/Paris"
+  },
+  "pinData": {},
+  "meta": {
+    "description": "Chaque matin : vérifie que la purge tourne, que la file SMS s’écoule et que le référentiel de fériés est à jour."
+  },
+  "tags": [
+    {
+      "name": "ERA · pré-étude"
+    }
+  ]
+}
