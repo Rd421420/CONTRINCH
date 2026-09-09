@@ -14,7 +14,18 @@ const PLAGE_ENVOI = { debut: 9, fin: 19 };   // aucun SMS hors de cette plage
 /** Délai minimum entre la demande et le premier créneau proposé. */
 const DELAI_MINI_JOURS_OUVRES = 2;
 
-/** Durée de blocage provisoire des deux créneaux proposés, en heures ouvrées. */
+/**
+ * Délai de réponse laissé au candidat, en heures OUVRÉES, pendant lequel
+ * les deux créneaux proposés lui sont réservés.
+ *
+ * Passé ce délai sans réponse, les deux créneaux sont réellement SUPPRIMÉS
+ * de `creneaux_reserves` — ils ne sont plus seulement ignorés — et
+ * redeviennent proposables à d'autres candidats.
+ *
+ * Le compteur est ouvré : il se met en pause à 19 h et reprend à 9 h le
+ * lendemain ouvré. Une proposition partie à 18 h expire donc le lendemain
+ * à 10 h, pas à 20 h.
+ */
 const BLOCAGE_HEURES_OUVREES = 2;
 
 /** Une seule relance après expiration du premier blocage (§5). */

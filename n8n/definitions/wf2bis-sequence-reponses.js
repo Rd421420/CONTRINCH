@@ -338,7 +338,7 @@ module.exports = {
     f.inserer('Mettre en file', [1300, 200], 'file_sms');
 
     f.code('Branche — créneaux bloqués', [1080, 360], filtre('creneau', 'Les DEUX créneaux proposés sont bloqués, pas seulement le choisi.'));
-    f.inserer('Bloquer les créneaux', [1300, 360], 'creneaux_reserves');
+    f.remplacerCreneau('Bloquer les créneaux', [1300, 360]);
 
     f.code('Branche — journal des écartés', [1080, 520], filtre('refus', 'Journal anonyme : aucune donnée nominative, donc jamais purgé.'));
     f.inserer('Journaliser', [1300, 520], 'refus_log');

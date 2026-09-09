@@ -201,6 +201,11 @@ test('collision à la confirmation : deux nouveaux créneaux, jamais un échec',
   assert.match(dernier.envois[0].texte, /vient d’être pris/);
   assert.equal(candidat.etape_sms, ETAPE.CRENEAU); // le compteur repart
   assert.notEqual(candidat.statut, 'rdv_pose');
+
+  // Régression : les créneaux de rechange doivent remonter à l'appelant.
+  // Sans cela ils n'étaient jamais enregistrés, la base gardait les
+  // anciens, et la réponse « A » redésignait le créneau déjà pris.
+  assert.deepEqual(dernier.creneaux, rechange);
 });
 
 test('AUTRE sur les créneaux : arbitrage humain, pas d’abandon', () => {

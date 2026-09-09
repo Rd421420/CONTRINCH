@@ -10,7 +10,7 @@ dans le secteur. **Il ne sélectionne pas** : tout dossier non favorable part en
 arbitrage humain, et c'est Romain qui décide puis qui écrit au candidat.
 
 ```
-npm test            # 118 tests, aucune dépendance externe
+npm test            # 121 tests, aucune dépendance externe
 npm run n8n:build   # régénère les 12 workflows n8n depuis src/
 ```
 
@@ -155,8 +155,14 @@ relire à trois mois.
 Second défaut, trouvé en exécutant les nodes Code générés : les créneaux relus en
 base arrivent en chaînes ISO, alors que ceux qui viennent d'être calculés sont
 des `Date`. La confirmation du rendez-vous plantait sur « Invalid time value » —
-au moment précis où le rendez-vous devait être posé. Les deux sont couverts par
-un test de régression.
+au moment précis où le rendez-vous devait être posé.
+
+Troisième défaut, trouvé en câblant la suppression des propositions : sur une
+collision, les créneaux de rechange étaient bien listés dans le SMS mais jamais
+renvoyés à l'appelant, donc jamais écrits en base. Le candidat lisait deux
+nouveaux horaires pendant que la base gardait les anciens — sa réponse « A »
+redésignait le créneau déjà pris, et la collision bouclait. Les trois sont
+couverts par un test de régression.
 
 ---
 
@@ -169,6 +175,18 @@ disparaissait et le candidat attendait indéfiniment. WF-8 le rappelle chaque
 matin, écrit au candidat un mot d'attente au bout de trois jours ouvrés, et
 route vers un suppléant pendant une absence déclarée. `/traite` est la seule
 chose qui l'arrête — un dossier oublié doit rester bruyant.
+
+**6. Une proposition de créneau sans réponse est supprimée, pas seulement
+ignorée.** Le délai de réponse reste celui du §5 — **2 heures ouvrées** — mais
+au terme de ce délai les deux créneaux sortent réellement de
+`creneaux_reserves` (WF-2 quater), au lieu d'y traîner jusqu'à la purge à sept
+jours. La suppression est limitée au candidat traité dans l'exécution : une
+suppression globale ferait disparaître le marqueur des candidats restés hors
+du lot de dix, qui ne seraient alors jamais relancés.
+
+Dans la même logique, un créneau proposé **remplace celui de même rang** dans
+une seule instruction SQL. Aucun jeu de propositions ne survit à sa
+remplaçante, quel que soit l'ordre d'exécution des branches n8n.
 
 ## Points restés ouverts
 

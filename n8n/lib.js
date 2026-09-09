@@ -114,6 +114,39 @@ function fabrique(nomWorkflow) {
       );
     },
 
+    /**
+     * Écrit un créneau proposé en remplaçant celui de même rang.
+     *
+     * Un INSERT simple laisserait les anciennes propositions en base : après
+     * une relance ou une collision, le candidat aurait deux jeux de créneaux
+     * et sa réponse « B » ne désignerait plus rien de sûr. Le DELETE et
+     * l'INSERT sont dans la même instruction, donc l'ordre d'exécution des
+     * branches n8n n'a aucune influence.
+     */
+    remplacerCreneau(nom, position, extra = {}) {
+      const query = [
+        '-- Le créneau de même rang est libéré dans la même instruction que',
+        "-- l'écriture du nouveau : aucun jeu de propositions ne survit à sa",
+        '-- remplaçante, quel que soit l\'ordre des branches.',
+        'WITH libere AS (',
+        '    DELETE FROM locatif.creneaux_reserves',
+        '    WHERE candidat_id = $1::bigint',
+        '      AND NOT confirme',
+        '      AND rang = $6::smallint',
+        ')',
+        'INSERT INTO locatif.creneaux_reserves',
+        '    (candidat_id, ref_lot, debut, fin, reserve_jusqu_a, rang, confirme)',
+        'VALUES',
+        '    ($1::bigint, $2::text, $3::timestamptz, $4::timestamptz, $5::timestamptz, $6::smallint, FALSE);',
+      ].join('\n');
+
+      return api.requete(nom, position, query, {
+        remplacements:
+          '={{ $json.candidat_id }}, {{ $json.ref_lot }}, {{ $json.debut }}, {{ $json.fin }}, {{ $json.reserve_jusqu_a }}, {{ $json.rang }}',
+        extra,
+      });
+    },
+
     planification(nom, position, regle) {
       return ajouter(nom, 'n8n-nodes-base.scheduleTrigger', 1.2, { rule: regle }, position);
     },

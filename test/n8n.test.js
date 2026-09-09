@@ -699,3 +699,79 @@ test('WF-7 : le chat de la conversation ne part pas en colonne de la table absen
   });
   assert.deepEqual(Object.keys(sortie[0].json).sort(), ['chat_id_suppleant', 'debut', 'fin']);
 });
+
+test('WF-2 bis : après une collision, les créneaux de rechange sont enregistrés', () => {
+  const debut = T.instant(2026, 9, 9, 14, 0);
+  const candidat = { ...CANDIDAT, etape_sms: ETAPE.CRENEAU, verdict: 'eligible' };
+  const proposes = [
+    { rang: 1, debut: debut.toISOString(), fin: T.instant(2026, 9, 9, 14, 30).toISOString() },
+    { rang: 2, debut: T.instant(2026, 9, 9, 16, 0).toISOString(), fin: T.instant(2026, 9, 9, 16, 30).toISOString() },
+  ];
+  const collision = [{
+    json: {
+      summary: 'VISITE — AUTRE',
+      description: require('../src/immoagenda').construireDescription({
+        type: 'Visite',
+        lot: { reference: '677', loyer_cc: 700 },
+      }),
+      start: { dateTime: debut.toISOString() },
+      end: { dateTime: T.instant(2026, 9, 9, 14, 30).toISOString() },
+    },
+  }];
+
+  const { actions } = traiterParLeWorkflow(candidat, 'A', {
+    creneauxProposes: proposes,
+    evenements: collision,
+  });
+
+  const creneaux = actions.filter((a) => a.__action === 'creneau');
+  assert.equal(creneaux.length, 2, 'les créneaux de rechange doivent être écrits en base');
+  assert.deepEqual(creneaux.map((c) => c.rang), [1, 2]);
+  // Le créneau que Romain vient d'occuper ne doit pas être reproposé.
+  assert.equal(creneaux.some((c) => c.debut === debut.toISOString()), false);
+});
+
+test('un créneau proposé remplace celui de même rang, dans la même instruction', () => {
+  for (const fichier of ['wf2bis-sequence-reponses.json', 'wf2quater-expiration-relance.json']) {
+    const n = node(charger(fichier), 'Bloquer les créneaux');
+    assert.equal(n.type, 'n8n-nodes-base.postgres');
+    assert.match(n.parameters.query, /DELETE FROM locatif\.creneaux_reserves/);
+    assert.match(n.parameters.query, /INSERT INTO locatif\.creneaux_reserves/);
+    assert.match(n.parameters.query, /rang = \$6::smallint/);
+    // DELETE et INSERT dans une seule instruction : l'ordre d'exécution
+    // des branches n8n ne peut pas les inverser.
+    assert.equal(n.parameters.query.split(';').filter((x) => x.trim()).length, 1);
+  }
+});
+
+test('WF-2 quater : les propositions périmées sont supprimées, relance ou abandon', () => {
+  const wf = charger('wf2quater-expiration-relance.json');
+  const requete = node(wf, 'Supprimer les propositions périmées').parameters.query;
+  assert.match(requete, /DELETE FROM locatif\.creneaux_reserves/);
+  assert.match(requete, /candidat_id = \$1::bigint/);
+  // Scopée au candidat traité : une suppression globale ferait disparaître
+  // le marqueur des candidats restés hors du lot de dix.
+  assert.match(requete, /reserve_jusqu_a <= now\(\)/);
+
+  const contexte = {
+    dossiers: [{
+      candidat: { id: 7, mobile: '+33674707110', cree_le: T.instant(2026, 9, 7, 10, 0).toISOString(), nb_relances: 1 },
+      lot: LOT,
+    }],
+    jours_feries: [],
+    lots: [{ reference: '677', latitude: 42.6206, longitude: 3.0189 }],
+    reservations: [],
+    bloquees: [],
+  };
+
+  const actions = executerCode(codeDe(wf, 'Relancer ou abandonner'), {
+    entree: [{ json: {} }],
+    amont: { 'Paramètres': PARAMETRES, 'Créneaux expirés': [{ json: contexte }] },
+  }).map((a) => a.json);
+
+  // Ce candidat a déjà eu sa relance : il est abandonné, mais ses créneaux
+  // sont tout de même libérés.
+  assert.ok(actions.some((a) => a.__action === 'liberer' && a.candidat_id === 7));
+  assert.ok(actions.some((a) => a.__action === 'candidat' && a.statut === 'arbitrage'));
+  assert.equal(actions.some((a) => a.__action === 'creneau'), false);
+});

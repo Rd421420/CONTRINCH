@@ -76,6 +76,18 @@ SELECT
     ) b
   ) AS bloquees;`;
 
+const LIBERER = `-- Suppression réelle, et non simple expiration : passé le délai sans
+-- réponse, les deux créneaux proposés sortent de la table et redeviennent
+-- proposables à d'autres candidats.
+--
+-- La suppression est limitée au candidat traité dans cette exécution. Une
+-- suppression globale ferait disparaître le marqueur des candidats restés
+-- hors du lot de dix, qui ne seraient alors jamais relancés.
+DELETE FROM locatif.creneaux_reserves
+WHERE candidat_id = $1::bigint
+  AND NOT confirme
+  AND reserve_jusqu_a <= now();`;
+
 const FENETRE = `const contexte = $input.first().json;
 const parametres = $('Paramètres').first().json;
 const dossiers = contexte.dossiers || [];
@@ -115,6 +127,10 @@ const actions = [];
 for (const dossier of contexte.dossiers || []) {
   const candidat = dossier.candidat;
   const lot = dossier.lot;
+
+  // Quoi qu'il advienne ensuite — relance ou abandon — les propositions
+  // périmées de ce candidat sont supprimées, pas seulement ignorées.
+  actions.push({ json: { __action: 'liberer', candidat_id: candidat.id } });
 
   // Une seule relance. Au-delà, la séquence s'arrête et le dossier entre
   // dans le récapitulatif de 18 h.
@@ -240,7 +256,11 @@ module.exports = {
     f.code('Branche — messages', [860, 360], filtre('sms'));
     f.inserer('Mettre en file', [1080, 360], 'file_sms');
     f.code('Branche — créneaux', [860, 520], filtre('creneau'));
-    f.inserer('Bloquer les créneaux', [1080, 520], 'creneaux_reserves');
+    f.remplacerCreneau('Bloquer les créneaux', [1080, 520]);
+    f.code('Branche — libération', [860, 840], filtre('liberer'));
+    f.requete('Supprimer les propositions périmées', [1080, 840], LIBERER, {
+      remplacements: '={{ $json.candidat_id }}',
+    });
     f.code('Branche — alerte', [860, 680], filtre('telegram'));
     f.telegram('Prévenir sur Telegram', [1080, 680]);
 
@@ -256,6 +276,7 @@ module.exports = {
       ['Branche — fiche candidat', 'Mettre à jour la fiche'],
       ['Branche — messages', 'Mettre en file'],
       ['Branche — créneaux', 'Bloquer les créneaux'],
+      ['Branche — libération', 'Supprimer les propositions périmées'],
       ['Branche — alerte', 'Prévenir sur Telegram'],
     ]) {
       f.relier('Relancer ou abandonner', branche);

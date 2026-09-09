@@ -352,11 +352,19 @@ const ETAPES = {
     if (contexte.creneauEncoreLibre && !contexte.creneauEncoreLibre(creneau)) {
       const rechange = (contexte.reproposer ? contexte.reproposer() : []) || [];
       if (rechange.length < 2) return versArbitrage('collision_sans_rechange');
-      return reponse(
-        { etape_sms: ETAPE.CRENEAU, echecs_parsing: 0 },
-        envoi(M.creneauPris({ creneaux: rechange, temps: contexte.temps || T }), 'creneau_pris'),
-        null,
-      );
+
+      // Les créneaux de rechange sont renvoyés à l'appelant, et pas
+      // seulement listés dans le SMS : sans cela ils ne sont jamais
+      // enregistrés, la base garde les anciens, et la réponse « A » du
+      // candidat désigne le créneau déjà pris — la collision boucle.
+      return {
+        ...reponse(
+          { etape_sms: ETAPE.CRENEAU, echecs_parsing: 0 },
+          envoi(M.creneauPris({ creneaux: rechange, temps: contexte.temps || T }), 'creneau_pris'),
+          null,
+        ),
+        creneaux: rechange,
+      };
     }
 
     return {
