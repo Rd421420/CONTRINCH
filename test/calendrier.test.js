@@ -107,3 +107,25 @@ test('une date ISO absolue est lue comme un instant, pas comme une heure murale'
   // En hiver, la même heure murale est un autre instant.
   assert.equal(T.depuisIso('2026-01-15T14:00').toISOString(), '2026-01-15T13:00:00.000Z');
 });
+
+test('âge en jours ouvrés : le week-end et les fériés ne comptent pas', () => {
+  const cas = [
+    // vendredi 18 h → lundi 9 h : un seul jour ouvré écoulé
+    [T.instant(2026, 9, 11, 18, 0), T.instant(2026, 9, 14, 9, 0), 1],
+    // lundi → jeudi : trois
+    [T.instant(2026, 9, 7, 10, 0), T.instant(2026, 9, 10, 10, 0), 3],
+    // dans la même journée : zéro
+    [T.instant(2026, 9, 8, 9, 0), T.instant(2026, 9, 8, 18, 0), 0],
+    // à cheval sur le 11 novembre, férié un mercredi
+    [T.instant(2026, 11, 10, 10, 0), T.instant(2026, 11, 13, 10, 0), 2],
+    // une semaine complète de congés : cinq jours ouvrés
+    [T.instant(2026, 9, 7, 9, 0), T.instant(2026, 9, 14, 9, 0), 5],
+  ];
+  for (const [debut, fin, attendu] of cas) {
+    assert.equal(cal.joursOuvresEntre(debut, fin, FERIES), attendu, `${T.isoJour(debut)} → ${T.isoJour(fin)}`);
+  }
+});
+
+test('âge en jours ouvrés : une date future ne renvoie jamais de négatif', () => {
+  assert.equal(cal.joursOuvresEntre(T.instant(2026, 9, 10, 9, 0), T.instant(2026, 9, 7, 9, 0), FERIES), 0);
+});

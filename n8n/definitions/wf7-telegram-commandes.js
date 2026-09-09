@@ -28,11 +28,18 @@ function repondre(contenu) {
 }
 
 const AIDE = [
-  '<b>Commandes</b>',
+  '<b>Lots</b>',
   '/lot RÉF COMMUNE TYPE LOYER [visale-ok] [zone1|zone2|zone3]',
   '   ex. <code>/lot 12345 Le Soler T3 780 visale-ok zone3</code>',
   '/loue RÉF — sort le bien de la liste des disponibles',
+  '',
+  '<b>Dossiers</b>',
+  '/traite ID — clôt un arbitrage : seul moyen d’arrêter les rappels',
   '/pieces ID — envoie la demande de pièces au candidat retenu',
+  '',
+  '<b>Absence</b>',
+  '/absence AAAA-MM-JJ AAAA-MM-JJ [chat suppléant]',
+  '/retour — met fin à l’absence en cours',
 ].join('\\n');
 
 if (/^\\/(aide|help|start)/i.test(texte)) return repondre(AIDE);
@@ -42,6 +49,30 @@ if (loue) return [{ json: { __action: 'loue', chat_id, reference: loue[1] } }];
 
 const pieces = texte.match(/^\\/pieces\\s+(\\d+)/i);
 if (pieces) return [{ json: { __action: 'pieces', chat_id, candidat_id: Number(pieces[1]) } }];
+
+// Clôture d'un arbitrage. C'est la SEULE chose qui arrête les rappels
+// quotidiens de WF-8 — un dossier qu'on oublie de clore reste bruyant.
+const traite = texte.match(/^\\/traite\\s+(\\d+)/i);
+if (traite) return [{ json: { __action: 'traite', chat_id, candidat_id: Number(traite[1]) } }];
+
+if (/^\\/retour\\b/i.test(texte)) return [{ json: { __action: 'retour', chat_id } }];
+
+const absence = texte.match(/^\\/absence\\s+(\\d{4}-\\d{2}-\\d{2})\\s+(\\d{4}-\\d{2}-\\d{2})(?:\\s+(\\S+))?/i);
+if (absence) {
+  if (absence[2] < absence[1]) return repondre('La date de fin précède la date de début.');
+  return [{
+    json: {
+      __action: 'absence',
+      chat_id,
+      debut: absence[1],
+      fin: absence[2],
+      // Sans suppléant, le dispositif ne s'arrête pas pour autant : les
+      // candidats reçoivent simplement leur mot d'attente plus tôt.
+      chat_id_suppleant: absence[3] || null,
+    },
+  }];
+}
+if (/^\\/absence\\b/i.test(texte)) return repondre('Format : /absence AAAA-MM-JJ AAAA-MM-JJ [chat suppléant]');
 
 const lot = texte.match(/^\\/lot\\s+(.+)$/i);
 if (!lot) return repondre(AIDE);
@@ -143,6 +174,69 @@ return $input.all().map((item) => {
   };
 });`;
 
+const TRAITE = `-- Idempotent : re-clore un dossier déjà clos ne renvoie aucune ligne,
+-- et la confirmation le dit plutôt que de mentir.
+UPDATE locatif.candidats
+SET arbitre_le = now()
+WHERE id = $1::bigint
+  AND statut = 'arbitrage'
+  AND arbitre_le IS NULL
+RETURNING id, nom;`;
+
+const CONFIRMER_TRAITE = `const demande = $('Branche — arbitrage clos').first().json;
+const ligne = $input.first().json;
+return [{
+  json: {
+    chat_id: demande.chat_id,
+    texte: ligne && ligne.id
+      ? \`Dossier #\${ligne.id} (\${ligne.nom || 'sans nom'}) clos. Il ne reviendra plus dans les rappels.\`
+      : \`Aucun arbitrage ouvert ne porte le numéro \${demande.candidat_id} — déjà clos, ou identifiant erroné.\`,
+  },
+}];`;
+
+const LIGNE_ABSENCE = `// Le chat_id de la conversation ne va pas en base : ce n'est pas une
+// colonne de la table, c'est juste l'adresse où répondre.
+return $input.all().map((item) => ({
+  json: {
+    debut: item.json.debut,
+    fin: item.json.fin,
+    chat_id_suppleant: item.json.chat_id_suppleant,
+  },
+}));`;
+
+const CONFIRMER_ABSENCE = `const demande = $('Branche — absence').first().json;
+const ligne = $input.first().json;
+return [{
+  json: {
+    chat_id: demande.chat_id,
+    texte: [
+      \`<b>Absence enregistrée</b> du \${ligne.debut} au \${ligne.fin}.\`,
+      ligne.chat_id_suppleant
+        ? \`Les arbitrages en attente partiront vers \${ligne.chat_id_suppleant}.\`
+        : 'Aucun suppléant : les candidats dont le dossier traîne recevront un mot d’attente dès le premier jour ouvré.',
+      '/retour pour y mettre fin plus tôt.',
+    ].join('\\n'),
+  },
+}];`;
+
+const RETOUR = `-- Clôt l'absence en cours à hier : la période reste en base, elle ne
+-- couvre simplement plus aujourd'hui.
+UPDATE locatif.absences
+SET fin = current_date - 1
+WHERE current_date BETWEEN debut AND fin
+RETURNING id, debut, fin;`;
+
+const CONFIRMER_RETOUR = `const demande = $('Branche — retour').first().json;
+const ligne = $input.first().json;
+return [{
+  json: {
+    chat_id: demande.chat_id,
+    texte: ligne && ligne.id
+      ? 'Absence terminée. Les arbitrages en attente te reviennent.'
+      : 'Aucune absence en cours.',
+  },
+}];`;
+
 const LOUE = `UPDATE locatif.lots
 SET statut = 'loue'
 WHERE reference = $1::text
@@ -201,8 +295,27 @@ module.exports = {
     f.code('Branche — demande de pièces', [200, 520], filtre('pieces'));
     f.executer('Lancer WF-5', [420, 520], 'ERA · WF-5 · Demande de pièces');
 
-    f.code('Branche — réponse directe', [200, 700], filtre('reponse'));
-    f.telegram('Répondre — aide', [420, 700]);
+    f.code('Branche — arbitrage clos', [200, 700], filtre('traite'));
+    f.requete('Clore le dossier', [420, 700], TRAITE, {
+      remplacements: '={{ $json.candidat_id }}',
+      extra: { alwaysOutputData: true },
+    });
+    f.code('Confirmer la clôture', [640, 700], CONFIRMER_TRAITE);
+    f.telegram('Répondre — dossier clos', [860, 700]);
+
+    f.code('Branche — absence', [200, 880], filtre('absence'));
+    f.code('Ligne d’absence', [420, 880], LIGNE_ABSENCE);
+    f.inserer('Créer l’absence', [640, 880], 'absences');
+    f.code('Confirmer l’absence', [860, 880], CONFIRMER_ABSENCE);
+    f.telegram('Répondre — absence', [1080, 880]);
+
+    f.code('Branche — retour', [200, 1060], filtre('retour'));
+    f.requete('Terminer l’absence', [420, 1060], RETOUR, { extra: { alwaysOutputData: true } });
+    f.code('Confirmer le retour', [640, 1060], CONFIRMER_RETOUR);
+    f.telegram('Répondre — retour', [860, 1060]);
+
+    f.code('Branche — réponse directe', [200, 1240], filtre('reponse'));
+    f.telegram('Répondre — aide', [420, 1240]);
 
     f.chaine('Message Telegram', 'Paramètres', 'Lire la commande');
     f.relier('Lire la commande', 'Branche — nouveau lot');
@@ -218,6 +331,12 @@ module.exports = {
     f.chaine('Branche — bien loué', 'Sortir le lot', 'Confirmer la sortie', 'Répondre — lot loué');
     f.relier('Lire la commande', 'Branche — demande de pièces');
     f.relier('Branche — demande de pièces', 'Lancer WF-5');
+    f.relier('Lire la commande', 'Branche — arbitrage clos');
+    f.chaine('Branche — arbitrage clos', 'Clore le dossier', 'Confirmer la clôture', 'Répondre — dossier clos');
+    f.relier('Lire la commande', 'Branche — absence');
+    f.chaine('Branche — absence', 'Ligne d’absence', 'Créer l’absence', 'Confirmer l’absence', 'Répondre — absence');
+    f.relier('Lire la commande', 'Branche — retour');
+    f.chaine('Branche — retour', 'Terminer l’absence', 'Confirmer le retour', 'Répondre — retour');
     f.relier('Lire la commande', 'Branche — réponse directe');
     f.relier('Branche — réponse directe', 'Répondre — aide');
 

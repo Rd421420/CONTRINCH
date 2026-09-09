@@ -524,3 +524,178 @@ test('WF-6 : silencieux quand tout va bien, bavard quand la purge s’arrête', 
   assert.match(alerte[0].json.texte, /crontab/);
   assert.match(alerte[0].json.texte, /41 fiche/);
 });
+
+// ─── WF-8 · dossiers en attente d'arbitrage ────────────────────────────
+
+const FERIES_LONGS = ['2026-11-01', '2026-11-11'];
+
+/** Rejoue le tri de WF-8 à un instant donné. */
+function arbitragesEnAttente(dossiers, { absence = null, maintenant } = {}) {
+  const wf = charger('wf8-arbitrages-en-attente.json');
+  const original = Date;
+  global.Date = class extends original {
+    constructor(...args) { return args.length ? new original(...args) : new original(maintenant); }
+    static now() { return maintenant.getTime(); }
+  };
+  try {
+    return executerCode(codeDe(wf, 'Trier par ancienneté'), {
+      entree: [{ json: { absence, jours_feries: FERIES_LONGS, dossiers } }],
+      amont: { 'Paramètres': PARAMETRES },
+    }).map((a) => a.json);
+  } finally {
+    global.Date = original;
+  }
+}
+
+function dossier(extra = {}) {
+  return {
+    id: 42,
+    nom: 'CHARLINE LOGIE',
+    mobile: '+33674707110',
+    situation: 'cdi',
+    garantie: 'aucune',
+    verdict: 'hors_criteres',
+    motif: 'Revenus de 900 € pour un seuil de 1892 €',
+    relances_arbitrage: 0,
+    reference: '677',
+    commune: 'SAINT CYPRIEN',
+    loyer_cc: 700,
+    ...extra,
+  };
+}
+
+test('WF-8 : un dossier du jour ne déclenche rien', () => {
+  const actions = arbitragesEnAttente(
+    [dossier({ depuis: T.instant(2026, 9, 9, 11, 0).toISOString() })],
+    { maintenant: T.instant(2026, 9, 9, 17, 0) },
+  );
+  assert.deepEqual(actions, [], 'un dossier tombé ce matin ne doit pas être rappelé le soir même');
+});
+
+test('WF-8 : au bout d’un jour ouvré, le dossier revient sur Telegram', () => {
+  const actions = arbitragesEnAttente(
+    [dossier({ depuis: T.instant(2026, 9, 8, 16, 0).toISOString() })],
+    { maintenant: T.instant(2026, 9, 9, 9, 0) },
+  );
+
+  assert.equal(actions.length, 1);
+  assert.equal(actions[0].__action, 'telegram');
+  assert.match(actions[0].texte, /Arbitrages en attente — 1/);
+  assert.match(actions[0].texte, /\/traite 42/);
+  assert.match(actions[0].texte, /1 jour ouvré/);
+});
+
+test('WF-8 : le week-end ne fait pas vieillir un dossier', () => {
+  // Tombé vendredi 18 h, regardé lundi 9 h : un seul jour ouvré écoulé,
+  // donc pas encore le mot d'attente.
+  const actions = arbitragesEnAttente(
+    [dossier({ depuis: T.instant(2026, 9, 11, 18, 0).toISOString() })],
+    { maintenant: T.instant(2026, 9, 14, 9, 0) },
+  );
+  assert.equal(actions.filter((a) => a.__action === 'sms').length, 0);
+  assert.match(actions.find((a) => a.__action === 'telegram').texte, /1 jour ouvré/);
+});
+
+test('WF-8 : au-delà de trois jours ouvrés, le candidat reçoit un mot d’attente', () => {
+  const actions = arbitragesEnAttente(
+    [dossier({ depuis: T.instant(2026, 9, 3, 10, 0).toISOString() })],
+    { maintenant: T.instant(2026, 9, 9, 9, 0) },
+  );
+
+  const sms = actions.find((a) => a.__action === 'sms');
+  assert.equal(sms.type_message, 'attente_arbitrage');
+  assert.equal(sms.candidat_id, 42);
+  // Le mot d'attente n'annonce rien et ne sous-entend rien.
+  assert.doesNotMatch(sms.texte, /refus|ne correspond pas|dossier retenu|félicitations/i);
+  assert.match(sms.texte, /toujours entre les mains d.un conseiller/);
+
+  const compteur = actions.find((a) => a.__action === 'candidat');
+  assert.equal(compteur.relances_arbitrage, 1);
+  assert.match(actions.find((a) => a.__action === 'telegram').texte, /🔴/);
+});
+
+test('WF-8 : le mot d’attente n’est envoyé qu’une fois', () => {
+  const actions = arbitragesEnAttente(
+    [dossier({ depuis: T.instant(2026, 9, 3, 10, 0).toISOString(), relances_arbitrage: 1 })],
+    { maintenant: T.instant(2026, 9, 9, 9, 0) },
+  );
+  assert.equal(actions.filter((a) => a.__action === 'sms').length, 0);
+  // Le rappel Telegram, lui, continue tant que le dossier n'est pas clos.
+  assert.equal(actions.filter((a) => a.__action === 'telegram').length, 1);
+});
+
+test('WF-8 : pendant une absence, les rappels vont au suppléant', () => {
+  const actions = arbitragesEnAttente(
+    [dossier({ depuis: T.instant(2026, 9, 8, 10, 0).toISOString() })],
+    {
+      absence: { debut: '2026-09-07', fin: '2026-09-18', chat_id_suppleant: '999888777' },
+      maintenant: T.instant(2026, 9, 9, 9, 0),
+    },
+  );
+
+  const rappel = actions.find((a) => a.__action === 'telegram');
+  assert.equal(rappel.chat_id, '999888777');
+  assert.match(rappel.texte, /suppléance/);
+});
+
+test('WF-8 : sans suppléant, l’absence resserre le délai du mot d’attente', () => {
+  const unJour = [dossier({ depuis: T.instant(2026, 9, 8, 10, 0).toISOString() })];
+
+  const normal = arbitragesEnAttente(unJour, { maintenant: T.instant(2026, 9, 9, 9, 0) });
+  assert.equal(normal.filter((a) => a.__action === 'sms').length, 0);
+
+  const absent = arbitragesEnAttente(unJour, {
+    absence: { debut: '2026-09-07', fin: '2026-09-18', chat_id_suppleant: null },
+    maintenant: T.instant(2026, 9, 9, 9, 0),
+  });
+  assert.equal(absent.filter((a) => a.__action === 'sms').length, 1);
+  assert.equal(absent.find((a) => a.__action === 'telegram').chat_id, PARAMETRES[0].json.chat_id);
+});
+
+test('WF-8 : un dossier sans mobile est rappelé, mais rien ne lui est envoyé', () => {
+  const actions = arbitragesEnAttente(
+    [dossier({ depuis: T.instant(2026, 9, 3, 10, 0).toISOString(), mobile: null })],
+    { maintenant: T.instant(2026, 9, 9, 9, 0) },
+  );
+  assert.equal(actions.filter((a) => a.__action === 'sms').length, 0);
+  assert.equal(actions.filter((a) => a.__action === 'telegram').length, 1);
+});
+
+test('WF-7 : /traite, /absence et /retour sont lus', () => {
+  const wf = charger('wf7-telegram-commandes.json');
+  const jsCode = codeDe(wf, 'Lire la commande');
+
+  function commande(texte) {
+    return executerCode(jsCode, {
+      entree: [{ json: { message: { text: texte, chat: { id: 42 } } } }],
+      amont: { 'Paramètres': PARAMETRES },
+    })[0].json;
+  }
+
+  assert.deepEqual(
+    { ...commande('/traite 42') },
+    { __action: 'traite', chat_id: '42', candidat_id: 42 },
+  );
+
+  const absence = commande('/absence 2026-10-20 2026-10-27 999888777');
+  assert.equal(absence.__action, 'absence');
+  assert.equal(absence.debut, '2026-10-20');
+  assert.equal(absence.chat_id_suppleant, '999888777');
+
+  assert.equal(commande('/absence 2026-10-20 2026-10-27').chat_id_suppleant, null);
+  assert.equal(commande('/retour').__action, 'retour');
+
+  // Une période inversée est refusée plutôt qu'écrite en base.
+  assert.equal(commande('/absence 2026-10-27 2026-10-20').__action, 'reponse');
+  assert.equal(commande('/absence demain').__action, 'reponse');
+
+  assert.match(commande('/aide').texte, /\/traite ID/);
+});
+
+test('WF-7 : le chat de la conversation ne part pas en colonne de la table absences', () => {
+  const wf = charger('wf7-telegram-commandes.json');
+  const sortie = executerCode(codeDe(wf, 'Ligne d’absence'), {
+    entree: [{ json: { chat_id: '42', debut: '2026-10-20', fin: '2026-10-27', chat_id_suppleant: null } }],
+  });
+  assert.deepEqual(Object.keys(sortie[0].json).sort(), ['chat_id_suppleant', 'debut', 'fin']);
+});

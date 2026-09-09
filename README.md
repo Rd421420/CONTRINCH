@@ -10,8 +10,8 @@ dans le secteur. **Il ne sélectionne pas** : tout dossier non favorable part en
 arbitrage humain, et c'est Romain qui décide puis qui écrit au candidat.
 
 ```
-npm test            # 106 tests, aucune dépendance externe
-npm run n8n:build   # régénère les 11 workflows n8n depuis src/
+npm test            # 118 tests, aucune dépendance externe
+npm run n8n:build   # régénère les 12 workflows n8n depuis src/
 ```
 
 Node 20 ou plus. Aucun `node_modules` : tout tourne sur la bibliothèque standard.
@@ -36,8 +36,8 @@ rejouent sur d'anciens dossiers et n'ont besoin ni de réseau ni de base.
 | `src/temps.js` | heures murales Europe/Paris, robustes au changement d'heure | — |
 | `src/config.js` | toutes les constantes de calendrier et d'agenda | §5 |
 | `src/justificatifs.js` | WF-5 · liste limitative des pièces par situation | §6 |
-| `db/schema.sql` + `db/002-file-sms.sql` | schéma `locatif` | §6 |
-| `n8n/workflows/*.json` | les 11 workflows, importables tels quels | §6 |
+| `db/*.sql` | schéma `locatif` et ses deux migrations | §6 |
+| `n8n/workflows/*.json` | les 12 workflows, importables tels quels | §6 |
 | `scripts/charger-jours-feries.js` | alimente `jours_feries` depuis l'API Etalab | §5 |
 
 Chaque module est une fonction pure : rien ne lit la base, rien n'appelle Google
@@ -64,7 +64,8 @@ seuil, ni horaire, ni texte de message : ce sont des câblages.
 | WF-4 | créneaux — testable seul, avec le motif de chaque écart |
 | WF-5 / 5 bis | demande de pièces, récapitulatif Telegram de 18 h |
 | WF-6 | contrôle quotidien de la purge et de la file |
-| WF-7 | commandes Telegram `/lot`, `/loue`, `/pieces` |
+| WF-8 | rappel des arbitrages non clos, mode absence |
+| WF-7 | commandes Telegram `/lot`, `/loue`, `/pieces`, `/traite`, `/absence` |
 
 Le repli LLM sur les montants illisibles n'est pas branché : `parseMontant`
 renvoie `null`, la séquence repose la question une fois, puis bascule sur
@@ -79,6 +80,7 @@ VPS, et il contient nom, revenus et situation professionnelle du candidat.
 # 1. Schéma, dans cet ordre
 psql -d era_loyers -f db/schema.sql
 psql -d era_loyers -f db/002-file-sms.sql
+psql -d era_loyers -f db/003-arbitrage.sql
 
 # 2. Jours fériés (une fois par an)
 node scripts/charger-jours-feries.js | psql -d era_loyers
@@ -158,6 +160,16 @@ un test de régression.
 
 ---
 
+**5. Un dossier d'arbitrage revient tous les matins tant qu'il n'est pas
+clos.** Le §6 signale la fragilité — « une semaine de congés, ce sont dix
+arbitrages en attente et des candidats sans réponse » — sans dire quoi en
+faire. Jusqu'ici un dossier partait dans le récapitulatif de 18 h, `notifie_le`
+était posé, et plus rien ne le faisait remonter : non traité ce soir-là, il
+disparaissait et le candidat attendait indéfiniment. WF-8 le rappelle chaque
+matin, écrit au candidat un mot d'attente au bout de trois jours ouvrés, et
+route vers un suppléant pendant une absence déclarée. `/traite` est la seule
+chose qui l'arrête — un dossier oublié doit rester bruyant.
+
 ## Points restés ouverts
 
 Ils viennent du §9 du cahier des charges et n'ont pas de réponse dans le code :
@@ -170,6 +182,7 @@ Ils viennent du §9 du cahier des charges et n'ont pas de réponse dans le code 
 | Seuil de 12 km | `RAYON_ANCRE_KM` | à ajuster sur les trajets réels |
 | Plafond de visites | `PLAFOND_VISITES_APRES_MIDI = 5` | démarrer à 5, remonter à 6 une fois mesuré |
 | Libellé du SMS 4a | `src/messages.js` | validation juridique ERA |
+| Délais d'arbitrage (1 et 3 jours ouvrés) | `ARBITRAGE_*_JOURS` | à ajuster après un mois |
 
 Deux règles du §5 ne sont pas implémentées et ne le seront pas en v1 : l'ordre des
 visites **par itinéraire** à l'intérieur d'un après-midi (il faudrait replanifier

@@ -124,6 +124,7 @@ for (const dossier of contexte.dossiers || []) {
         __action: 'candidat',
         id: candidat.id,
         statut: 'arbitrage',
+        arbitrage_depuis: new Date().toISOString(),
         motif: 'Sans réponse après deux propositions de créneaux',
       },
     });
@@ -149,6 +150,7 @@ for (const dossier of contexte.dossiers || []) {
         __action: 'candidat',
         id: candidat.id,
         statut: 'arbitrage',
+        arbitrage_depuis: new Date().toISOString(),
         motif: 'Aucun créneau disponible lors de la relance',
       },
     });

@@ -32,7 +32,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Analyse positionnelle tolérante : la commune peut tenir en plusieurs\n// mots (« Le Soler »), et les drapeaux se placent librement en fin de ligne.\nconst parametres = $('Paramètres').first().json;\nconst message = $input.first().json.message || {};\nconst texte = String(message.text || '').trim();\nconst chat_id = String((message.chat && message.chat.id) || parametres.chat_id);\n\nfunction repondre(contenu) {\n  return [{ json: { __action: 'reponse', chat_id, texte: contenu } }];\n}\n\nconst AIDE = [\n  '<b>Commandes</b>',\n  '/lot RÉF COMMUNE TYPE LOYER [visale-ok] [zone1|zone2|zone3]',\n  '   ex. <code>/lot 12345 Le Soler T3 780 visale-ok zone3</code>',\n  '/loue RÉF — sort le bien de la liste des disponibles',\n  '/pieces ID — envoie la demande de pièces au candidat retenu',\n].join('\\n');\n\nif (/^\\/(aide|help|start)/i.test(texte)) return repondre(AIDE);\n\nconst loue = texte.match(/^\\/loue\\s+(\\S+)/i);\nif (loue) return [{ json: { __action: 'loue', chat_id, reference: loue[1] } }];\n\nconst pieces = texte.match(/^\\/pieces\\s+(\\d+)/i);\nif (pieces) return [{ json: { __action: 'pieces', chat_id, candidat_id: Number(pieces[1]) } }];\n\nconst lot = texte.match(/^\\/lot\\s+(.+)$/i);\nif (!lot) return repondre(AIDE);\n\nconst mots = lot[1].trim().split(/\\s+/);\nconst reference = mots.shift();\n\nconst drapeaux = [];\nwhile (mots.length && /^(visale-ok|visale-non|zone[123])$/i.test(mots[mots.length - 1])) {\n  drapeaux.push(mots.pop().toLowerCase());\n}\n\nconst indexType = mots.findIndex((m) => /^T\\d$/i.test(m));\nif (indexType < 0 || !mots[indexType + 1]) {\n  return repondre('Format attendu : /lot RÉF COMMUNE TYPE LOYER [visale-ok]\\n' + AIDE);\n}\n\nconst commune = mots.slice(0, indexType).join(' ');\nconst type_lot = mots[indexType].toUpperCase();\nconst loyer_cc = Number(String(mots[indexType + 1]).replace(',', '.'));\n\nif (!commune || !Number.isFinite(loyer_cc)) {\n  return repondre('Commune ou loyer illisible.\\n' + AIDE);\n}\n\nconst zone = drapeaux.find((d) => /^zone[123]$/.test(d));\n\nreturn [{\n  json: {\n    __action: 'lot',\n    chat_id,\n    reference,\n    commune,\n    type_lot,\n    loyer_cc,\n    // Sans ce champ, le système proposerait Visale sur des lots où le\n    // propriétaire a pris la GLI — les deux ne se cumulent pas.\n    accepte_visale: drapeaux.includes('visale-ok'),\n    zone_visale: zone ? Number(zone.slice(4)) : null,\n  },\n}];"
+        "jsCode": "// Analyse positionnelle tolérante : la commune peut tenir en plusieurs\n// mots (« Le Soler »), et les drapeaux se placent librement en fin de ligne.\nconst parametres = $('Paramètres').first().json;\nconst message = $input.first().json.message || {};\nconst texte = String(message.text || '').trim();\nconst chat_id = String((message.chat && message.chat.id) || parametres.chat_id);\n\nfunction repondre(contenu) {\n  return [{ json: { __action: 'reponse', chat_id, texte: contenu } }];\n}\n\nconst AIDE = [\n  '<b>Lots</b>',\n  '/lot RÉF COMMUNE TYPE LOYER [visale-ok] [zone1|zone2|zone3]',\n  '   ex. <code>/lot 12345 Le Soler T3 780 visale-ok zone3</code>',\n  '/loue RÉF — sort le bien de la liste des disponibles',\n  '',\n  '<b>Dossiers</b>',\n  '/traite ID — clôt un arbitrage : seul moyen d’arrêter les rappels',\n  '/pieces ID — envoie la demande de pièces au candidat retenu',\n  '',\n  '<b>Absence</b>',\n  '/absence AAAA-MM-JJ AAAA-MM-JJ [chat suppléant]',\n  '/retour — met fin à l’absence en cours',\n].join('\\n');\n\nif (/^\\/(aide|help|start)/i.test(texte)) return repondre(AIDE);\n\nconst loue = texte.match(/^\\/loue\\s+(\\S+)/i);\nif (loue) return [{ json: { __action: 'loue', chat_id, reference: loue[1] } }];\n\nconst pieces = texte.match(/^\\/pieces\\s+(\\d+)/i);\nif (pieces) return [{ json: { __action: 'pieces', chat_id, candidat_id: Number(pieces[1]) } }];\n\n// Clôture d'un arbitrage. C'est la SEULE chose qui arrête les rappels\n// quotidiens de WF-8 — un dossier qu'on oublie de clore reste bruyant.\nconst traite = texte.match(/^\\/traite\\s+(\\d+)/i);\nif (traite) return [{ json: { __action: 'traite', chat_id, candidat_id: Number(traite[1]) } }];\n\nif (/^\\/retour\\b/i.test(texte)) return [{ json: { __action: 'retour', chat_id } }];\n\nconst absence = texte.match(/^\\/absence\\s+(\\d{4}-\\d{2}-\\d{2})\\s+(\\d{4}-\\d{2}-\\d{2})(?:\\s+(\\S+))?/i);\nif (absence) {\n  if (absence[2] < absence[1]) return repondre('La date de fin précède la date de début.');\n  return [{\n    json: {\n      __action: 'absence',\n      chat_id,\n      debut: absence[1],\n      fin: absence[2],\n      // Sans suppléant, le dispositif ne s'arrête pas pour autant : les\n      // candidats reçoivent simplement leur mot d'attente plus tôt.\n      chat_id_suppleant: absence[3] || null,\n    },\n  }];\n}\nif (/^\\/absence\\b/i.test(texte)) return repondre('Format : /absence AAAA-MM-JJ AAAA-MM-JJ [chat suppléant]');\n\nconst lot = texte.match(/^\\/lot\\s+(.+)$/i);\nif (!lot) return repondre(AIDE);\n\nconst mots = lot[1].trim().split(/\\s+/);\nconst reference = mots.shift();\n\nconst drapeaux = [];\nwhile (mots.length && /^(visale-ok|visale-non|zone[123])$/i.test(mots[mots.length - 1])) {\n  drapeaux.push(mots.pop().toLowerCase());\n}\n\nconst indexType = mots.findIndex((m) => /^T\\d$/i.test(m));\nif (indexType < 0 || !mots[indexType + 1]) {\n  return repondre('Format attendu : /lot RÉF COMMUNE TYPE LOYER [visale-ok]\\n' + AIDE);\n}\n\nconst commune = mots.slice(0, indexType).join(' ');\nconst type_lot = mots[indexType].toUpperCase();\nconst loyer_cc = Number(String(mots[indexType + 1]).replace(',', '.'));\n\nif (!commune || !Number.isFinite(loyer_cc)) {\n  return repondre('Commune ou loyer illisible.\\n' + AIDE);\n}\n\nconst zone = drapeaux.find((d) => /^zone[123]$/.test(d));\n\nreturn [{\n  json: {\n    __action: 'lot',\n    chat_id,\n    reference,\n    commune,\n    type_lot,\n    loyer_cc,\n    // Sans ce champ, le système proposerait Visale sur des lots où le\n    // propriétaire a pris la GLI — les deux ne se cumulent pas.\n    accepte_visale: drapeaux.includes('visale-ok'),\n    zone_visale: zone ? Number(zone.slice(4)) : null,\n  },\n}];"
       },
       "id": "5425b223-430f-4ada-abf1-d9d9e6ec4966",
       "name": "Lire la commande",
@@ -268,6 +268,219 @@
     },
     {
       "parameters": {
+        "jsCode": "return $input.all()\n  .filter((item) => item.json.__action === 'traite')\n  .map((item) => {\n    const { __action, ...reste } = item.json;\n    return { json: reste };\n  });"
+      },
+      "id": "a7f46f71-dcf2-4ad3-a22e-240e8854fae9",
+      "name": "Branche — arbitrage clos",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        200,
+        700
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- Idempotent : re-clore un dossier déjà clos ne renvoie aucune ligne,\n-- et la confirmation le dit plutôt que de mentir.\nUPDATE locatif.candidats\nSET arbitre_le = now()\nWHERE id = $1::bigint\n  AND statut = 'arbitrage'\n  AND arbitre_le IS NULL\nRETURNING id, nom;",
+        "options": {
+          "queryReplacement": "={{ $json.candidat_id }}"
+        }
+      },
+      "id": "8584979d-3261-4781-a3c4-5c4a1fd5b841",
+      "name": "Clore le dossier",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [
+        420,
+        700
+      ],
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const demande = $('Branche — arbitrage clos').first().json;\nconst ligne = $input.first().json;\nreturn [{\n  json: {\n    chat_id: demande.chat_id,\n    texte: ligne && ligne.id\n      ? `Dossier #${ligne.id} (${ligne.nom || 'sans nom'}) clos. Il ne reviendra plus dans les rappels.`\n      : `Aucun arbitrage ouvert ne porte le numéro ${demande.candidat_id} — déjà clos, ou identifiant erroné.`,\n  },\n}];"
+      },
+      "id": "a3f86e69-5c84-4679-ad79-9df7cf4d61ac",
+      "name": "Confirmer la clôture",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        640,
+        700
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "sendMessage",
+        "chatId": "={{ $json.chat_id }}",
+        "text": "={{ $json.texte }}",
+        "additionalFields": {
+          "appendAttribution": false,
+          "parse_mode": "HTML"
+        }
+      },
+      "id": "6fd80219-94f3-41f4-a420-15926293e6b5",
+      "name": "Répondre — dossier clos",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        860,
+        700
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "return $input.all()\n  .filter((item) => item.json.__action === 'absence')\n  .map((item) => {\n    const { __action, ...reste } = item.json;\n    return { json: reste };\n  });"
+      },
+      "id": "1c33b40c-3a50-48ee-ad5d-66587ce62230",
+      "name": "Branche — absence",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        200,
+        880
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Le chat_id de la conversation ne va pas en base : ce n'est pas une\n// colonne de la table, c'est juste l'adresse où répondre.\nreturn $input.all().map((item) => ({\n  json: {\n    debut: item.json.debut,\n    fin: item.json.fin,\n    chat_id_suppleant: item.json.chat_id_suppleant,\n  },\n}));"
+      },
+      "id": "337c43cc-93a0-41d6-a60c-c75e4f0a2c8d",
+      "name": "Ligne d’absence",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        420,
+        880
+      ]
+    },
+    {
+      "parameters": {
+        "schema": {
+          "__rl": true,
+          "value": "locatif",
+          "mode": "name"
+        },
+        "table": {
+          "__rl": true,
+          "value": "absences",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "matchingColumns": [],
+          "schema": []
+        },
+        "options": {}
+      },
+      "id": "6c99eb09-e196-4ae1-a631-7f9e842548e8",
+      "name": "Créer l’absence",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [
+        640,
+        880
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const demande = $('Branche — absence').first().json;\nconst ligne = $input.first().json;\nreturn [{\n  json: {\n    chat_id: demande.chat_id,\n    texte: [\n      `<b>Absence enregistrée</b> du ${ligne.debut} au ${ligne.fin}.`,\n      ligne.chat_id_suppleant\n        ? `Les arbitrages en attente partiront vers ${ligne.chat_id_suppleant}.`\n        : 'Aucun suppléant : les candidats dont le dossier traîne recevront un mot d’attente dès le premier jour ouvré.',\n      '/retour pour y mettre fin plus tôt.',\n    ].join('\\n'),\n  },\n}];"
+      },
+      "id": "4043f6b5-66b5-4588-a78c-01fe1a70facd",
+      "name": "Confirmer l’absence",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        860,
+        880
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "sendMessage",
+        "chatId": "={{ $json.chat_id }}",
+        "text": "={{ $json.texte }}",
+        "additionalFields": {
+          "appendAttribution": false,
+          "parse_mode": "HTML"
+        }
+      },
+      "id": "518acc1d-c18e-43be-a028-007a4f982592",
+      "name": "Répondre — absence",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1080,
+        880
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "return $input.all()\n  .filter((item) => item.json.__action === 'retour')\n  .map((item) => {\n    const { __action, ...reste } = item.json;\n    return { json: reste };\n  });"
+      },
+      "id": "1031e3ad-531c-47fb-a8a8-ce21735ab689",
+      "name": "Branche — retour",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        200,
+        1060
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- Clôt l'absence en cours à hier : la période reste en base, elle ne\n-- couvre simplement plus aujourd'hui.\nUPDATE locatif.absences\nSET fin = current_date - 1\nWHERE current_date BETWEEN debut AND fin\nRETURNING id, debut, fin;",
+        "options": {}
+      },
+      "id": "b227f6ca-9b49-426e-a90c-c5b2815ce22e",
+      "name": "Terminer l’absence",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [
+        420,
+        1060
+      ],
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const demande = $('Branche — retour').first().json;\nconst ligne = $input.first().json;\nreturn [{\n  json: {\n    chat_id: demande.chat_id,\n    texte: ligne && ligne.id\n      ? 'Absence terminée. Les arbitrages en attente te reviennent.'\n      : 'Aucune absence en cours.',\n  },\n}];"
+      },
+      "id": "4f2de575-bbc4-4b23-ae75-0720db1a7cff",
+      "name": "Confirmer le retour",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        640,
+        1060
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "sendMessage",
+        "chatId": "={{ $json.chat_id }}",
+        "text": "={{ $json.texte }}",
+        "additionalFields": {
+          "appendAttribution": false,
+          "parse_mode": "HTML"
+        }
+      },
+      "id": "892bd296-4ddb-4d0b-aecf-dc709bef23b8",
+      "name": "Répondre — retour",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        860,
+        1060
+      ]
+    },
+    {
+      "parameters": {
         "jsCode": "return $input.all()\n  .filter((item) => item.json.__action === 'reponse')\n  .map((item) => {\n    const { __action, ...reste } = item.json;\n    return { json: reste };\n  });"
       },
       "id": "ff54842e-13ba-481f-a834-d46711994e31",
@@ -276,7 +489,7 @@
       "typeVersion": 2,
       "position": [
         200,
-        700
+        1240
       ]
     },
     {
@@ -296,7 +509,7 @@
       "typeVersion": 1.2,
       "position": [
         420,
-        700
+        1240
       ]
     }
   ],
@@ -338,6 +551,21 @@
           },
           {
             "node": "Branche — demande de pièces",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Branche — arbitrage clos",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Branche — absence",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Branche — retour",
             "type": "main",
             "index": 0
           },
@@ -442,6 +670,116 @@
         [
           {
             "node": "Lancer WF-5",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Branche — arbitrage clos": {
+      "main": [
+        [
+          {
+            "node": "Clore le dossier",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Clore le dossier": {
+      "main": [
+        [
+          {
+            "node": "Confirmer la clôture",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Confirmer la clôture": {
+      "main": [
+        [
+          {
+            "node": "Répondre — dossier clos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Branche — absence": {
+      "main": [
+        [
+          {
+            "node": "Ligne d’absence",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ligne d’absence": {
+      "main": [
+        [
+          {
+            "node": "Créer l’absence",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Créer l’absence": {
+      "main": [
+        [
+          {
+            "node": "Confirmer l’absence",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Confirmer l’absence": {
+      "main": [
+        [
+          {
+            "node": "Répondre — absence",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Branche — retour": {
+      "main": [
+        [
+          {
+            "node": "Terminer l’absence",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Terminer l’absence": {
+      "main": [
+        [
+          {
+            "node": "Confirmer le retour",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Confirmer le retour": {
+      "main": [
+        [
+          {
+            "node": "Répondre — retour",
             "type": "main",
             "index": 0
           }

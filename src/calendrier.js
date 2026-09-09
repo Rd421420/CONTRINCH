@@ -102,6 +102,26 @@ function ajouterHeuresOuvrees(date, heures, feries) {
   return curseur;
 }
 
+/**
+ * Nombre de jours ouvrés écoulés entre deux instants.
+ *
+ * Sert à mesurer l'âge d'un dossier en attente d'arbitrage. Compté en jours
+ * ouvrés et non en heures : un dossier tombé le vendredi à 18 h n'a pas
+ * vieilli le lundi matin, il a vieilli d'un jour.
+ */
+function joursOuvresEntre(debut, fin, feries) {
+  if (fin <= debut) return 0;
+  const dernier = T.debutDeJour(fin);
+  let jour = T.debutDeJour(debut);
+  let ecoules = 0;
+
+  for (let garde = 0; garde < 800 && jour < dernier; garde += 1) {
+    jour = T.ajouterJours(jour, 1);
+    if (estJourOuvre(jour, feries)) ecoules += 1;
+  }
+  return ecoules;
+}
+
 /** Échéance des deux créneaux bloqués : 2 heures ouvrées après l'envoi. */
 function expirationBlocage(dateEnvoi, feries) {
   return ajouterHeuresOuvrees(dateEnvoi, BLOCAGE_HEURES_OUVREES, feries);
@@ -117,5 +137,6 @@ module.exports = {
   dansPlageEnvoi,
   prochaineOuverture,
   ajouterHeuresOuvrees,
+  joursOuvresEntre,
   expirationBlocage,
 };

@@ -186,6 +186,19 @@ const messages = {
     ].join('\n');
   },
 
+  /**
+   * Mot d'attente, envoyé au candidat dont le dossier traîne en arbitrage.
+   *
+   * Même contrainte que le SMS 4b, et elle est structurelle : ce message
+   * n'annonce rien, ne sous-entend rien, ne laisse rien espérer. Il dit
+   * seulement que le dossier est vivant. Un candidat qui n'a aucune nouvelle
+   * pendant une semaine rappelle l'agence — c'est précisément le temps que
+   * le dispositif doit faire gagner.
+   */
+  attenteArbitrage() {
+    return "Bonjour, votre demande est toujours entre les mains d'un conseiller. Nous revenons vers vous dès que possible. Merci de votre patience.";
+  },
+
   /** Réponse incomprise : une seule reformulation, puis bascule Telegram. */
   incompris() {
     return "Désolé, je n'ai pas compris votre réponse. Pouvez-vous la reformuler ? Répondez CONSEILLER pour être rappelé par un humain.";

@@ -173,7 +173,12 @@ const resultat = ERA.sequence.traiterReponse(candidat, fenetre.texte_recu, {
 const actions = [];
 
 // 1. La fiche candidat, telle que le socle l'a fait évoluer.
-actions.push({ json: { __action: 'candidat', id: candidat.id, ...resultat.patch } });
+// L'entrée en file d'arbitrage est datée ici : c'est de cet instant que
+// part le compteur de relance, pas du récapitulatif de 18 h.
+const bascule = resultat.sortie && !candidat.arbitrage_depuis
+  ? { arbitrage_depuis: new Date().toISOString() }
+  : {};
+actions.push({ json: { __action: 'candidat', id: candidat.id, ...resultat.patch, ...bascule } });
 
 // 2. Les messages, qui partiront quand la plage d'envoi le permettra.
 for (const message of resultat.envois) {

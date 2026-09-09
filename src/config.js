@@ -24,6 +24,19 @@ const RELANCES_MAX = 1;
 const ECHECS_PARSING_MAX = 2;
 
 /**
+ * Suivi des dossiers en attente d'arbitrage.
+ *
+ * Le §6 pose la fragilité sans la résoudre : « destinataire unique veut dire
+ * que le système s'arrête quand tu es absent. Une semaine de congés, ce sont
+ * dix arbitrages en attente et des candidats sans réponse. » Ces trois seuils
+ * sont la réponse, comptés en jours OUVRÉS — un dossier tombé le vendredi
+ * soir n'a pas vieilli le lundi matin.
+ */
+const ARBITRAGE_RAPPEL_JOURS = 1;   // au-delà, le dossier revient chaque matin
+const ARBITRAGE_ATTENTE_JOURS = 3;  // au-delà, le candidat reçoit un mot d'attente
+const ARBITRAGE_ATTENTE_ABSENCE_JOURS = 1; // pendant une absence, le délai se resserre
+
+/**
  * Blocs terrain — option B retenue au cahier des charges §5 :
  * l'après-midi est coupé en deux groupes indépendants, chacun avec sa
  * propre ancre géographique. Les matinées restent aux blocs Chantier
@@ -76,6 +89,9 @@ module.exports = {
   BLOCAGE_HEURES_OUVREES,
   RELANCES_MAX,
   ECHECS_PARSING_MAX,
+  ARBITRAGE_RAPPEL_JOURS,
+  ARBITRAGE_ATTENTE_JOURS,
+  ARBITRAGE_ATTENTE_ABSENCE_JOURS,
   BLOCS_TERRAIN,
   DUREE_VISITE_MIN,
   RAYON_ANCRE_KM,

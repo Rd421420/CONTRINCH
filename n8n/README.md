@@ -1,6 +1,6 @@
 # Workflows n8n
 
-Onze workflows importables tels quels. Le code des modules `src/` est
+Douze workflows importables tels quels. Le code des modules `src/` est
 **empaqueté dans les nodes Code** : aucun `require`, aucun volume à monter,
 aucune variable d'environnement. Un import et ça tourne.
 
@@ -30,7 +30,8 @@ npm run n8n:verifier    # échoue si un fichier n'est plus à jour
 | 8 | `wf2quater-expiration-relance.json` | expiration, relance unique, abandon | planifié, 15 min |
 | 9 | `wf5bis-recapitulatif-telegram.json` | un seul message à 18 h | planifié |
 | 10 | `wf6-controle.json` | contrôle de la purge et de la file | planifié, 8 h |
-| 11 | `wf7-telegram-commandes.json` | `/lot`, `/loue`, `/pieces` | Telegram |
+| 11 | `wf8-arbitrages-en-attente.json` | rappelle les dossiers non clos | planifié, 9 h |
+| 12 | `wf7-telegram-commandes.json` | `/lot`, `/loue`, `/pieces`, `/traite`, `/absence` | Telegram |
 
 **Un seul déclencheur Telegram dans tout le dispositif** (WF-7). Deux
 workflows qui écoutent le même jeton se volent les mises à jour.
@@ -50,7 +51,8 @@ workflows qui écoutent le même jeton se volent les mises à jour.
    Twilio » de WF-2 bis, et la coller dans la console Twilio, sur le numéro
    long code, champ « A MESSAGE COMES IN », méthode POST.
 
-4. **La base.** `db/schema.sql` puis `db/002-file-sms.sql`, dans cet ordre.
+4. **La base.** `db/schema.sql`, `db/002-file-sms.sql`, `db/003-arbitrage.sql`,
+   dans cet ordre.
 
 5. **Les jours fériés** : `node scripts/charger-jours-feries.js | psql -d era_loyers`.
    Une fois par an — WF-6 alerte quand le référentiel devient périmé.
@@ -66,6 +68,8 @@ Dans l'ordre de la checklist du §8 :
 - WF-2 bis : envoyer un SMS depuis ton propre numéro, dérouler la séquence
 - WF-2 ter : vérifier qu'un message préparé après 19 h ne part que le
   lendemain 9 h
+- WF-8 : laisser volontairement un dossier en arbitrage une journée, vérifier
+  qu'il remonte le lendemain matin et que `/traite` l'arrête
 
 **Phase 1 : le système propose, tu valides.** Le moyen le plus simple de
 tenir cette phase sans modifier les workflows est de désactiver WF-2 ter :
@@ -91,6 +95,46 @@ requête, qui renvoie une ligne unique portant des colonnes `json_agg`.
 Accessoirement : aucun node IF ni Switch. Leur schéma a changé plusieurs
 fois entre les versions 1.x de n8n. Un node Code qui renvoie zéro item
 arrête sa branche tout aussi bien.
+
+---
+
+## Le cycle d'un dossier d'arbitrage
+
+C'est le point que le §6 signalait comme fragile sans le résoudre — « une
+semaine de congés, ce sont dix arbitrages en attente et des candidats sans
+réponse ». Trois workflows s'en partagent la charge :
+
+```
+Verdict non favorable, ou CONSEILLER, ou créneaux refusés
+        ↓  WF-2 bis / WF-2 quater
+   statut = arbitrage, arbitrage_depuis = maintenant
+        ↓
+   File immédiate ─→ Telegram tout de suite   (demande de rappel)
+   File différée  ─→ récapitulatif de 18 h    (WF-5 bis, une seule fois)
+        ↓
+   ┌─ WF-8, chaque matin, tant que arbitre_le est NULL ─────────┐
+   │  J+1 ouvré  → le dossier revient dans le rappel du matin   │
+   │  J+3 ouvrés → mot d'attente au candidat (une seule fois)   │
+   │  en absence → rappels au suppléant, mot d'attente dès J+1  │
+   └────────────────────────────────────────────────────────────┘
+        ↓
+   /traite ID  →  arbitre_le posé, le dossier se tait
+```
+
+**Un dossier revient tous les matins tant qu'il n'est pas clos, et c'est
+voulu.** Le récapitulatif de 18 h annonce ce qui vient d'arriver et ne le
+répète jamais ; WF-8 rappelle ce qui traîne. Sans lui, un dossier passé
+inaperçu un soir disparaissait définitivement, et le candidat attendait sans
+que personne ne s'en aperçoive.
+
+`/traite` est le seul moyen d'arrêter la relance. Il ne fait rien d'autre :
+c'est toi qui écris au candidat, comme aujourd'hui.
+
+**Le mode absence** se déclare avec `/absence 2026-10-20 2026-10-27` et un
+identifiant de conversation suppléant, facultatif. Sans suppléant le
+dispositif ne s'arrête pas : le délai avant le mot d'attente tombe à un jour
+ouvré, pour qu'un candidat ne reste pas une semaine sans nouvelles. `/retour`
+y met fin plus tôt.
 
 ---
 
