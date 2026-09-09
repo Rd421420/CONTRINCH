@@ -64,7 +64,30 @@ l'environnement Node (il faut la version 20 au minimum).
 
 ## Étape 1 — La base de données
 
-### Le rôle PostgreSQL, d'abord
+### Le plus simple : passer par le compte postgres
+
+Sur Debian et Ubuntu, PostgreSQL n'écoute souvent que sur sa socket unix,
+et seul le rôle `postgres` existe. Le mode `SOCKET=1` s'appuie dessus : ni
+TCP, ni `pg_hba`, ni mot de passe.
+
+Une seule contrainte : **l'utilisateur postgres doit pouvoir lire le
+dépôt**, donc pas depuis `/root`, dont le mode est 0700.
+
+```bash
+mv ~/era-preetude /opt/era-preetude
+chmod -R a+rX /opt/era-preetude
+cd /opt/era-preetude
+
+SOCKET=1 BASE=verif_loc ./scripts/installer-vps.sh
+```
+
+C'est tout. La base, les huit tables, les jours fériés et le contrôle
+passent sans qu'aucun rôle ni mot de passe n'ait à être créé.
+
+Le rôle applicatif reste nécessaire, mais **plus tard** : c'est n8n qui en
+aura besoin pour se connecter. Voir ci-dessous.
+
+### Le rôle applicatif, pour n8n
 
 Sur Debian et Ubuntu, PostgreSQL ne connaît au départ que le rôle
 `postgres`, et l'authentification locale est en « peer » : le nom du compte
@@ -90,6 +113,12 @@ psql -c '\conninfo'
 
 **Garde ce mot de passe** : c'est celui de l'identifiant Postgres à saisir
 dans n8n à l'étape 4.
+
+Si n8n tourne dans Docker, il ne joindra pas `127.0.0.1` — l'adresse est
+celle du conteneur. Il faudra viser la passerelle du pont Docker (souvent
+`172.17.0.1` ou `172.18.0.1`), autoriser ce réseau dans `pg_hba.conf`, et
+ajouter la même adresse à `listen_addresses`. À traiter au moment de
+brancher n8n, pas avant.
 
 ### La voie courte
 

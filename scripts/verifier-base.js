@@ -14,6 +14,7 @@
  *      « autoMapInputData », qui n'apparaît qu'à l'exécution.
  *
  *   node scripts/verifier-base.js --base era_verif
+ *   SOCKET=1 node scripts/verifier-base.js --base era_verif   # via postgres
  *
  * À lancer sur une base JETABLE : le premier contrôle écrit le schéma.
  * Sur ta base de production, il ne ferait que recréer ce qui existe déjà,
@@ -40,8 +41,18 @@ function options() {
   return { base, verbeux: process.argv.includes('--verbeux') };
 }
 
+/**
+ * SOCKET=1 passe par « sudo -u postgres », sur la socket unix : c'est le
+ * seul chemin qui marche sur une installation Debian par défaut, où root
+ * n'a aucun rôle PostgreSQL.
+ */
 function psql(base, sql) {
-  return execFileSync('psql', ['-d', base, '-v', 'ON_ERROR_STOP=1', '-q', '-At', '-f', '-'], {
+  const arguments_ = ['-d', base, '-v', 'ON_ERROR_STOP=1', '-q', '-At', '-f', '-'];
+  const [commande, tous] = process.env.SOCKET === '1'
+    ? ['sudo', ['-u', 'postgres', 'psql', ...arguments_]]
+    : ['psql', arguments_];
+
+  return execFileSync(commande, tous, {
     input: sql,
     encoding: 'utf8',
     stdio: ['pipe', 'pipe', 'pipe'],
