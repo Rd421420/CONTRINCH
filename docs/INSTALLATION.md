@@ -131,11 +131,40 @@ psql -c '\conninfo'
 **Garde ce mot de passe** : c'est celui de l'identifiant Postgres à saisir
 dans n8n à l'étape 4.
 
-Si n8n tourne dans Docker, il ne joindra pas `127.0.0.1` — l'adresse est
-celle du conteneur. Il faudra viser la passerelle du pont Docker (souvent
-`172.17.0.1` ou `172.18.0.1`), autoriser ce réseau dans `pg_hba.conf`, et
-ajouter la même adresse à `listen_addresses`. À traiter au moment de
-brancher n8n, pas avant.
+### n8n en conteneur : l'accès à PostgreSQL
+
+Si n8n tourne dans Docker — c'est le cas des installations Hostinger — il ne
+joindra jamais `127.0.0.1` : cette adresse désigne le conteneur lui-même.
+
+Deux choses doivent être vraies :
+
+| | |
+|---|---|
+| PostgreSQL écoute sur la passerelle du pont | `listen_addresses` contient `172.18.0.1` |
+| `pg_hba.conf` autorise ce réseau | une règle `host … 172.18.0.0/16` |
+
+La seconde manque presque toujours, et n8n affiche alors « Couldn't
+connect » — le refus a lieu avant l'examen du mot de passe. Un script s'en
+charge :
+
+```bash
+ESSAI=1 ./scripts/ouvrir-acces-docker.sh verif_loc era   # montre sans écrire
+./scripts/ouvrir-acces-docker.sh verif_loc era
+```
+
+Il détecte les ponts Docker de la machine, n'ajoute que ce qui manque —
+cette base, ce rôle, ce réseau — sauvegarde `pg_hba.conf` avant d'y
+toucher, et recharge sans couper le service.
+
+L'identifiant Postgres à saisir dans n8n :
+
+| Champ | Valeur |
+|---|---|
+| Host | `172.18.0.1` — la passerelle, pas `localhost` |
+| Port | `5432` |
+| Database | `verif_loc` |
+| User | `era` |
+| SSL | Disable |
 
 ### La voie courte
 
