@@ -21,11 +21,16 @@ const CONFIG = {
   // --- Visale (Action Logement) — règles au 6 janvier 2026 ---------------
   // ⚠ À vérifier sur visale.fr avant mise en production, et à revérifier
   // chaque janvier : Action Logement révise ces montants régulièrement.
-  // ⚠ Zone Visale de Perpignan et des communes du portefeuille : À CONFIRMER.
+  //
+  // Pas de zonage : le portefeuille tient sur des communes d'un même
+  // secteur, et relever une zone par commune pour un plafond qui n'est
+  // jamais atteint coûte plus qu'il ne rapporte. Les deux montants ci-
+  // dessous sont les plus restrictifs de la grille — ceux que le système
+  // appliquait déjà par défaut faute de zone renseignée. Ce sont les deux
+  // seules valeurs à changer si le besoin s'en fait sentir.
   VISALE: {
-    ZONE_PAR_DEFAUT: 3,
-    PLAFOND_LOYER: { 1: 1940, 2: 1575, 3: 1365 },
-    FORFAIT_ETUDIANT: { 1: 1000, 2: 840, 3: 680 },
+    PLAFOND_LOYER: 1365,
+    FORFAIT_ETUDIANT: 680,
     TAUX_EFFORT_MAX: 0.50,
     AGE_FORFAIT_ETUDIANT_MAX: 30,
   },
@@ -316,9 +321,8 @@ function evaluerResteAVivre(d, loyer, revenus, out) {
  */
 function evaluerVisale(d, loyer, revenus, out) {
   const V = CONFIG.VISALE;
-  const zone = Number(d.zone_visale) || V.ZONE_PAR_DEFAUT;
-  const plafond = V.PLAFOND_LOYER[zone];
-  const forfaitEtudiant = V.FORFAIT_ETUDIANT[zone];
+  const plafond = V.PLAFOND_LOYER;
+  const forfaitEtudiant = V.FORFAIT_ETUDIANT;
 
   const base = { ...out, base: 'visale', taux_applique: V.TAUX_EFFORT_MAX };
 
@@ -384,7 +388,7 @@ function evaluerVisale(d, loyer, revenus, out) {
       ...base,
       verdict: 'hors_criteres',
       seuil_revenus: null,
-      motif: `Loyer de ${loyer} € CC supérieur au plafond Visale de ${plafond} € (zone ${zone})`,
+      motif: `Loyer de ${loyer} € CC supérieur au plafond Visale de ${plafond} €`,
     };
   }
 
@@ -397,7 +401,7 @@ function evaluerVisale(d, loyer, revenus, out) {
       verdict: 'a_verifier_visale',
       taux_applique: null,
       seuil_revenus: null,
-      motif: `Forfait étudiant Visale (loyer <= ${forfaitEtudiant} € en zone ${zone}) — visa à demander sur visale.fr`,
+      motif: `Forfait étudiant Visale (loyer <= ${forfaitEtudiant} €) — visa à demander sur visale.fr`,
     };
   }
 

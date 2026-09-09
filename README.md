@@ -10,7 +10,7 @@ dans le secteur. **Il ne sélectionne pas** : tout dossier non favorable part en
 arbitrage humain, et c'est Romain qui décide puis qui écrit au candidat.
 
 ```
-npm test            # 121 tests, aucune dépendance externe
+npm test            # 127 tests, aucune dépendance externe
 npm run n8n:build   # régénère les 12 workflows n8n depuis src/
 ```
 
@@ -188,17 +188,60 @@ Dans la même logique, un créneau proposé **remplace celui de même rang** dan
 une seule instruction SQL. Aucun jeu de propositions ne survit à sa
 remplaçante, quel que soit l'ordre d'exécution des branches n8n.
 
+**7. Trois changements demandés après la première livraison.**
+
+*Le message d'ouverture est fusionné.* Situation et garantie tenaient en deux
+messages ; elles tiennent en un seul, avec deux chiffres en réponse (« 1 3 »).
+Le parcours nominal passe de six messages à cinq. Un seul chiffre reçu n'est
+pas un échec : le système repose uniquement la question qui manque, plutôt que
+de faire payer au candidat une erreur de format.
+
+*Visale n'a plus de zonage.* Relever une zone par commune pour un plafond que
+le portefeuille n'atteint jamais coûtait plus que ça ne rapportait. Les deux
+montants retenus — 1 365 € de plafond, 680 € de forfait étudiant — sont les
+plus restrictifs de la grille, ceux que le système appliquait déjà par défaut.
+La colonne `lots.zone_visale` reste en base mais n'est plus lue.
+
+*Les créneaux se regroupent par demi-journée, pas par tranche de deux heures.*
+L'arbitrage laissé ouvert au §5 est tranché en faveur de l'option A : matin ou
+après-midi, sur les jours terrain. Ouvrir les matinées n'entre pas en conflit
+avec les blocs Chantier et Dossiers gestion — ils sont dans l'agenda, et le
+filtre d'occupation les respecte comme n'importe quel autre événement. Aucune
+règle n'a besoin de les connaître.
+
+L'agenda est désormais relu **d'abord par référence** : si le lot a déjà des
+visites posées dans une demi-journée, le candidat y prend le créneau suivant,
+même si une demi-journée vide se présentait plus tôt. Un seul déplacement vaut
+mieux qu'un créneau anticipé.
+
+## Le prix des accents
+
+Un seul caractère hors alphabet GSM 03.38 fait basculer tout un SMS en UCS-2 :
+la capacité tombe de 153 à 67 caractères par segment. Le message d'ouverture,
+seul à porter la mention d'information, fait **9 segments** — sans accents il
+en ferait 4.
+
+Sur 128 dossiers par mois, ces cinq segments supplémentaires pèsent une
+cinquantaine d'euros mensuels, à comparer aux 51 € que le §10 prévoit pour
+l'ensemble du dispositif. **L'estimation de coût du cahier des charges suppose
+implicitement des messages d'un segment ; elle est à refaire sur la base des
+segments réels.** `messages.segmentsSms()` les compte, et un test garde le
+message d'ouverture sous un plafond.
+
+Écrire sans accents diviserait la facture par deux. C'est un arbitrage
+d'image, pas de technique : il n'est pas pris ici.
+
 ## Points restés ouverts
 
 Ils viennent du §9 du cahier des charges et n'ont pas de réponse dans le code :
 
 | Sujet | Où c'est câblé | Ce qui manque |
 |---|---|---|
-| Zone Visale des communes du portefeuille | `lots.zone_visale`, défaut zone 3 | à relever une fois sur visale.fr |
 | Plafonds Visale au 6 janvier 2026 | `CONFIG.VISALE` dans `src/eligibilite.js` | à vérifier avant production, puis chaque janvier |
 | Taux Mila de 37 % | `CONFIG.TAUX_REVENUS_STABLES` | fourchette contractuelle 35–40 %, à confirmer |
 | Seuil de 12 km | `RAYON_ANCRE_KM` | à ajuster sur les trajets réels |
-| Plafond de visites | `PLAFOND_VISITES_APRES_MIDI = 5` | démarrer à 5, remonter à 6 une fois mesuré |
+| Plafond de visites | `PLAFOND_VISITES_DEMI_JOURNEE = 5` | démarrer à 5, remonter à 6 une fois mesuré |
+| Coût du message d'ouverture | `sms1Ouverture` | 9 segments : voir « Le prix des accents » |
 | Libellé du SMS 4a | `src/messages.js` | validation juridique ERA |
 | Délais d'arbitrage (1 et 3 jours ouvrés) | `ARBITRAGE_*_JOURS` | à ajuster après un mois |
 

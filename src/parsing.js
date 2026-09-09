@@ -40,6 +40,21 @@ function parseChoix(texte, max) {
   return valeur >= 1 && valeur <= max ? valeur : null;
 }
 
+/**
+ * Réponse au message d'ouverture fusionné : situation puis garantie,
+ * « 1 3 », « 1 et 3 », « 1/3 ».
+ *
+ * Renvoie toujours un objet, avec `garantie` à null quand le candidat n'a
+ * donné qu'un chiffre — l'appelant repose alors la seule question qui
+ * manque, plutôt que de tout redemander.
+ */
+function parseSituationEtGarantie(texte) {
+  const chiffres = (normaliser(texte).match(/\d/g) || []).map(Number).filter((n) => n >= 1 && n <= 9);
+  const situation = chiffres[0] >= 1 && chiffres[0] <= 6 ? chiffres[0] : null;
+  const garantie = chiffres[1] >= 1 && chiffres[1] <= 4 ? chiffres[1] : null;
+  return { situation, garantie };
+}
+
 function parseOuiNon(texte) {
   const n = normaliser(texte);
   if (/^(oui|o|yes|y|si|ok|exact|c'?est ca|tout a fait)\b/.test(n)) return true;
@@ -118,6 +133,7 @@ module.exports = {
   demandeConseiller,
   demandeDesinscription,
   parseChoix,
+  parseSituationEtGarantie,
   parseOuiNon,
   parseCreneau,
   parseMontant,

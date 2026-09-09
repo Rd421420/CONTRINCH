@@ -53,6 +53,7 @@ for (const item of $input.all()) {
     json: {
       ...mail,
       expediteur_mail: expediteur,
+      __test: mail.__test === true,
       sujet_mail: mail.subject || '',
       corps_mail: extrait,
       invite: [
@@ -96,6 +97,7 @@ for (let i = 0; i < items.length; i += 1) {
   const mobile = String(lu.mobile || '').replace(/\\D/g, '');
   sortie.push({
     json: {
+      __test: source.__test === true,
       expediteur: source.expediteur,
       chat_id: source.chat_id,
       source: (source.expediteur_mail || '').split('@')[1] || 'autre',
@@ -126,6 +128,28 @@ for (let i = 0; i < items.length; i += 1) {
     extrait = $('Lire la réponse du modèle').all()[i].json;
   }
   const lot = items[i].json.lot;
+
+  // Mode test : on rend compte de ce que le modèle a lu, et on n'écrit
+  // rien. C'est le même filtre et la même invite qu'en production — sans
+  // cela le test ne prouverait rien.
+  if (extrait.__test) {
+    sortie.push({
+      json: {
+        __action: 'rapport',
+        objet: extrait.sujet_mail,
+        expediteur: extrait.source,
+        reference_lue: extrait.reference || null,
+        lot_trouve: lot ? lot.reference : null,
+        nom: extrait.nom || null,
+        mobile: extrait.mobile || null,
+        email: extrait.email || null,
+        verdict: !lot
+          ? (extrait.reference ? 'référence inconnue en base' : 'aucune référence lue')
+          : (!extrait.mobile ? 'mobile manquant' : 'exploitable'),
+      },
+    });
+    continue;
+  }
 
   // Sans référence connue ou sans mobile, la séquence SMS ne peut pas
   // démarrer. Le dossier part en arbitrage plutôt que d'échouer en base
@@ -166,6 +190,42 @@ for (let i = 0; i < items.length; i += 1) {
 }
 return sortie;`;
 
+const MAILS_DE_TEST = `// Colle ici tes trente mails réels, un objet par message. Rien n'est
+// écrit en base : ce workflow te rend seulement ce que le modèle a lu.
+//
+// Le drapeau __test suit le mail jusqu'au bout de la chaîne — même filtre,
+// même invite, même modèle qu'en production. Un test qui emprunterait un
+// autre chemin ne prouverait rien.
+const MAILS = [
+  {
+    from: { value: [{ address: 'alerte@seloger.com' }] },
+    subject: 'Nouveau contact pour votre annonce',
+    text: "Bonjour, je souhaite visiter le bien référence 677. Vous pouvez me joindre au 06 74 70 71 10. Charline Logie",
+  },
+  {
+    from: { value: [{ address: 'contact@leboncoin.fr' }] },
+    subject: 'Un acheteur vous a contacté',
+    text: "Bonjour, votre appartement au Soler est-il toujours disponible ? Merci. Marc D. 0612345678",
+  },
+  {
+    from: { value: [{ address: 'compta@fournisseur.fr' }] },
+    subject: 'Votre facture de septembre',
+    text: 'Veuillez trouver ci-joint votre facture.',
+  },
+];
+
+return MAILS.map((mail) => ({ json: { ...mail, __test: true } }));`;
+
+const RAPPORT = `// Une ligne par mail retenu par le filtre. Les mails écartés en amont
+// n'apparaissent pas : c'est aussi une information, compare le nombre de
+// lignes au nombre de mails collés.
+return $input.all()
+  .filter((item) => item.json.__action === 'rapport')
+  .map((item) => {
+    const { __action, ...reste } = item.json;
+    return { json: reste };
+  });`;
+
 function filtre(action) {
   return `// Sépare la branche « ${action} ». Un node Code qui ne renvoie aucun item
 // arrête sa branche : c'est ce qui remplace ici un node IF.
@@ -185,7 +245,9 @@ module.exports = {
   construire(socle) {
     const f = fabrique('ERA · WF-1 · Tri de la boîte générale');
 
-    f.gmail('Boîte générale', [-260, 300], 10);
+    f.gmail('Boîte générale', [-260, 180], 10);
+    f.manuel('Tester l’extraction', [-480, 460]);
+    f.code('Mails de test', [-260, 460], MAILS_DE_TEST);
     noeudParametres(f, [-40, 300]);
     f.code('Filtre expéditeurs et mots-clés', [180, 300], FILTRE);
 
@@ -221,6 +283,12 @@ module.exports = {
     f.inserer('Créer le candidat', [1500, 200], 'candidats');
     f.code('Branche — arbitrage', [1280, 420], filtre('telegram'));
     f.telegram('Prévenir sur Telegram', [1500, 420]);
+
+    f.code('Rapport d’extraction', [1280, 640], RAPPORT);
+
+    f.relier('Tester l’extraction', 'Mails de test');
+    f.relier('Mails de test', 'Paramètres');
+    f.relier('Préparer la fiche', 'Rapport d’extraction');
 
     f.chaine(
       'Boîte générale',

@@ -48,18 +48,24 @@ const ARBITRAGE_ATTENTE_JOURS = 3;  // au-delà, le candidat reçoit un mot d'at
 const ARBITRAGE_ATTENTE_ABSENCE_JOURS = 1; // pendant une absence, le délai se resserre
 
 /**
- * Blocs terrain — option B retenue au cahier des charges §5 :
- * l'après-midi est coupé en deux groupes indépendants, chacun avec sa
- * propre ancre géographique. Les matinées restent aux blocs Chantier
- * et Dossiers gestion.
+ * Blocs terrain : une demi-journée est l'unité de regroupement.
+ *
+ * Le cahier des charges hésitait entre deux options (§5) : matin +
+ * après-midi, ou après-midi coupé en deux. C'est la première qui est
+ * retenue — la demi-journée entière, matin ou après-midi.
+ *
+ * Ouvrir les matinées n'entre pas en conflit avec les blocs Chantier et
+ * Dossiers gestion : ils sont dans l'agenda, et le filtre d'occupation les
+ * respecte comme n'importe quel autre événement. Une matinée déjà prise ne
+ * propose rien, sans qu'aucune règle n'ait à la connaître.
  */
 const BLOCS_TERRAIN = [
-  { jour: 1, groupe: 'A', debut: 14, fin: 16 },   // lundi
-  { jour: 1, groupe: 'B', debut: 16, fin: 18 },
-  { jour: 3, groupe: 'A', debut: 14, fin: 16 },   // mercredi
-  { jour: 3, groupe: 'B', debut: 16, fin: 18 },
-  { jour: 4, groupe: 'A', debut: 14, fin: 16 },   // jeudi
-  { jour: 4, groupe: 'B', debut: 16, fin: 18 },
+  { jour: 1, groupe: 'matin', debut: 9, fin: 12 },        // lundi
+  { jour: 1, groupe: 'apres-midi', debut: 14, fin: 18 },
+  { jour: 3, groupe: 'matin', debut: 9, fin: 12 },        // mercredi
+  { jour: 3, groupe: 'apres-midi', debut: 14, fin: 18 },
+  { jour: 4, groupe: 'matin', debut: 9, fin: 12 },        // jeudi
+  { jour: 4, groupe: 'apres-midi', debut: 14, fin: 18 },
 ];
 
 /** Durée d'un créneau de visite, en minutes (champ `end` de l'événement). */
@@ -72,15 +78,15 @@ const DUREE_VISITE_MIN = 30;
 const RAYON_ANCRE_KM = 12;
 
 /**
- * Plafond de visites par après-midi terrain. Le cahier des charges arrête
- * 6 comme maximum théorique mais demande de démarrer à 5, le temps de
- * mesurer les trajets réels.
+ * Plafond de visites par demi-journée. Le cahier des charges arrête 6 comme
+ * maximum théorique mais demande de démarrer à 5, le temps de mesurer les
+ * trajets réels.
  */
-const PLAFOND_VISITES_APRES_MIDI = 5;
+const PLAFOND_VISITES_DEMI_JOURNEE = 5;
 const PLAFOND_VISITES_MAX = 6;
 
-/** Un seul état des lieux par après-midi ; s'il y en a un, il devient l'ancre. */
-const PLAFOND_EDL_APRES_MIDI = 1;
+/** Un seul état des lieux par demi-journée ; s'il y en a un, il devient l'ancre. */
+const PLAFOND_EDL_DEMI_JOURNEE = 1;
 
 /** Horizon de recherche de créneaux avant abandon. */
 const SEMAINES_RECHERCHE_MAX = 4;
@@ -106,9 +112,9 @@ module.exports = {
   BLOCS_TERRAIN,
   DUREE_VISITE_MIN,
   RAYON_ANCRE_KM,
-  PLAFOND_VISITES_APRES_MIDI,
+  PLAFOND_VISITES_DEMI_JOURNEE,
   PLAFOND_VISITES_MAX,
-  PLAFOND_EDL_APRES_MIDI,
+  PLAFOND_EDL_DEMI_JOURNEE,
   SEMAINES_RECHERCHE_MAX,
   PURGE_JOURS_SANS_SUITE,
   PURGE_JOURS_APRES_VISITE,

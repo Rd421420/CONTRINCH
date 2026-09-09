@@ -57,7 +57,6 @@ function versEntreeEligibilite(candidat, lot) {
   return {
     loyer_cc: lot.loyer_cc,
     logement_type: lot.type_lot,
-    zone_visale: lot.zone_visale,
     lot_accepte_visale: lot.accepte_visale,
 
     situation: candidat.situation,
@@ -243,15 +242,30 @@ function finQuestionnaire(candidat, patch, contexte) {
 }
 
 const ETAPES = {
+  /**
+   * Situation ET garantie, dans une seule réponse : « 1 3 ».
+   *
+   * Un seul chiffre reçu n'est pas un échec — on repose uniquement la
+   * question qui manque, en réutilisant l'étape GARANTIE. Redemander les
+   * deux ferait payer au candidat une erreur de format.
+   */
   [ETAPE.SITUATION](candidat, texte) {
-    const choix = P.parseChoix(texte, 6);
-    if (!choix) return null;
-    const situation = SITUATIONS[choix];
+    const { situation: choixSituation, garantie: choixGarantie } = P.parseSituationEtGarantie(texte);
+    if (!choixSituation) return null;
 
+    const situation = SITUATIONS[choixSituation];
+    const garantie = choixGarantie ? GARANTIES[choixGarantie] : null;
+    const patch = garantie ? { situation, garantie } : { situation };
+
+    // La durée de contrat passe avant la garantie : c'est une exclusion
+    // sèche, et rien ne sert d'instruire un dossier qu'elle écarte.
     if (situation === 'cdd') {
-      return avancer(ETAPE.DUREE_CONTRAT, M.sms1bisDureeContrat(), 'sms1bis', { situation });
+      return avancer(ETAPE.DUREE_CONTRAT, M.sms1bisDureeContrat(), 'sms1bis', patch);
     }
-    return avancer(ETAPE.GARANTIE, M.sms2Garantie(), 'sms2', { situation });
+    if (!garantie) {
+      return avancer(ETAPE.GARANTIE, M.sms1bisGarantieSeule(), 'sms1bis_garantie', patch);
+    }
+    return apresGarantie(garantie, patch);
   },
 
   [ETAPE.DUREE_CONTRAT](candidat, texte) {
@@ -270,7 +284,12 @@ const ETAPES = {
         },
       });
     }
-    return avancer(ETAPE.GARANTIE, M.sms2Garantie(), 'sms2', { duree_contrat_mois: 24 });
+    // La garantie a pu être donnée dès le premier message : dans ce cas on
+    // enchaîne directement, sans reposer la question.
+    if (candidat.garantie) {
+      return apresGarantie(candidat.garantie, { duree_contrat_mois: 24 });
+    }
+    return avancer(ETAPE.GARANTIE, M.sms1bisGarantieSeule(), 'sms1bis_garantie', { duree_contrat_mois: 24 });
   },
 
   [ETAPE.GARANTIE](candidat, texte) {

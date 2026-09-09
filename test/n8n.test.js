@@ -256,9 +256,9 @@ test('WF-2 bis : une réponse fait avancer la séquence et met le message suivan
   assert.equal(fiche.etape_sms, ETAPE.GARANTIE);
 
   const sms = actions.find((a) => a.__action === 'sms');
-  assert.equal(sms.type_message, 'sms2');
+  assert.equal(sms.type_message, 'sms1bis_garantie');
   assert.equal(sms.mobile, '+33674707110');
-  assert.match(sms.texte, /Quelle garantie/);
+  assert.match(sms.texte, /il me manque la garantie/i);
 });
 
 test('WF-2 bis : un verdict favorable produit deux créneaux bloqués et le SMS 4a', () => {
@@ -425,14 +425,16 @@ test('WF-7 : les commandes Telegram sont lues, communes en plusieurs mots compri
     })[0].json;
   }
 
-  const lot = commande('/lot 12345 Le Soler T3 780 visale-ok zone3');
+  const lot = commande('/lot 12345 Le Soler T3 780 visale-ok');
   assert.equal(lot.__action, 'lot');
   assert.equal(lot.reference, '12345');
   assert.equal(lot.commune, 'Le Soler');
   assert.equal(lot.type_lot, 'T3');
   assert.equal(lot.loyer_cc, 780);
   assert.equal(lot.accepte_visale, true);
-  assert.equal(lot.zone_visale, 3);
+  // Plus de zonage Visale : la commande n'en demande plus, et la colonne
+  // zone_visale n'est plus alimentée.
+  assert.equal('zone_visale' in lot, false);
 
   const gli = commande('/lot 900 Bompas T2 640');
   assert.equal(gli.accepte_visale, false, 'sans visale-ok, le lot est réputé sous GLI');
@@ -774,4 +776,54 @@ test('WF-2 quater : les propositions périmées sont supprimées, relance ou aba
   assert.ok(actions.some((a) => a.__action === 'liberer' && a.candidat_id === 7));
   assert.ok(actions.some((a) => a.__action === 'candidat' && a.statut === 'arbitrage'));
   assert.equal(actions.some((a) => a.__action === 'creneau'), false);
+});
+
+test('WF-1 : le banc de test emprunte exactement le chemin de production', () => {
+  const wf = charger('wf1-tri-boite-generale.json');
+
+  // Les mails de test traversent le même filtre et la même invite.
+  const mails = executerCode(codeDe(wf, 'Mails de test'));
+  assert.ok(mails.length >= 3);
+  assert.ok(mails.every((m) => m.json.__test === true));
+
+  const filtres = executerCode(codeDe(wf, 'Filtre expéditeurs et mots-clés'), {
+    entree: mails.map((m) => ({ json: { ...m.json, ...PARAMETRES[0].json } })),
+  });
+  assert.equal(filtres.length, 2, 'la facture fournisseur doit être écartée en amont');
+  assert.ok(filtres.every((f) => f.json.__test === true), 'le drapeau doit survivre au filtre');
+});
+
+test('WF-1 : en mode test, rien n’est écrit en base', () => {
+  const wf = charger('wf1-tri-boite-generale.json');
+  const extraits = [{
+    json: {
+      __test: true, sujet_mail: 'Nouveau contact', source: 'seloger.com',
+      reference: '677', nom: 'CHARLINE LOGIE', mobile: '+33674707110', email: null,
+    },
+  }];
+
+  const sortie = executerCode(codeDe(wf, 'Préparer la fiche'), {
+    entree: [{ json: { lot: { reference: '677' } } }],
+    amont: { 'Lire la réponse du modèle': extraits },
+  }).map((x) => x.json);
+
+  assert.equal(sortie.length, 1);
+  assert.equal(sortie[0].__action, 'rapport', 'aucune fiche candidat ne doit être créée');
+  assert.equal(sortie[0].verdict, 'exploitable');
+
+  // Référence absente de la base : le rapport le dit au lieu d'échouer.
+  const inconnu = executerCode(codeDe(wf, 'Préparer la fiche'), {
+    entree: [{ json: { lot: null } }],
+    amont: { 'Lire la réponse du modèle': extraits },
+  })[0].json;
+  assert.equal(inconnu.verdict, 'référence inconnue en base');
+
+  // Hors mode test, la même entrée crée bien une fiche.
+  const production = executerCode(codeDe(wf, 'Préparer la fiche'), {
+    entree: [{ json: { lot: { reference: '677' } } }],
+    amont: {
+      'Lire la réponse du modèle': [{ json: { ...extraits[0].json, __test: false } }],
+    },
+  })[0].json;
+  assert.equal(production.__action, 'candidat');
 });

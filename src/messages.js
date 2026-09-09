@@ -23,10 +23,44 @@ const URL_MENTION =
   (typeof process !== 'undefined' && process.env && process.env.URL_MENTION_INFORMATION) ||
   'https://era-dupontromain.fr/donnees';
 
+/**
+ * Mention d'information, forme courte.
+ *
+ * Le §7 l'autorise explicitement : « Si la place manque dans le message, un
+ * lien court vers une page dédiée du site suffit. » Elle nomme le
+ * responsable de traitement et la finalité ; la durée de conservation et le
+ * détail des droits sont sur la page liée.
+ *
+ * L'URL est celle de la marque, jamais un raccourcisseur générique — les
+ * filtres opérateurs français traitent les deux très différemment.
+ */
 const MENTION_RGPD =
-  `Vos données servent uniquement à l'étude de votre demande (ERA Dupont Romain, ` +
-  `responsable de traitement), sont conservées 30 jours et vous disposez d'un droit ` +
-  `d'accès et de rectification : ${URL_MENTION}`;
+  `ERA Dupont Romain traite vos données pour l'étude de cette demande. Vos droits : ${URL_MENTION}`;
+
+/**
+ * Nombre de segments SMS facturés par Twilio.
+ *
+ * Un seul caractère hors alphabet GSM 03.38 fait basculer tout le message en
+ * UCS-2 : la capacité tombe de 160 à 70 caractères, et de 153 à 67 dès qu'il
+ * y a concaténation. Autrement dit, une apostrophe typographique ou un « € »
+ * mal placé peut doubler la facture d'un message.
+ */
+const GSM = "@£$¥èéùìòÇ\nØø\rÅåΔ_ΦΓΛΩΠΨΣΘΞÆæßÉ !\"#¤%&'()*+,-./0123456789:;<=>?"
+  + '¡ABCDEFGHIJKLMNOPQRSTUVWXYZÄÖÑÜ§¿abcdefghijklmnopqrstuvwxyzäöñüà';
+const GSM_ETENDU = '^{}\\[~]|€';
+
+function segmentsSms(texte) {
+  const caracteres = [...String(texte)];
+  const gsm = caracteres.every((c) => GSM.includes(c) || GSM_ETENDU.includes(c));
+
+  if (!gsm) {
+    const n = caracteres.length;
+    return n <= 70 ? 1 : Math.ceil(n / 67);
+  }
+  // Les caractères étendus comptent double en GSM-7.
+  const longueur = caracteres.reduce((total, c) => total + (GSM_ETENDU.includes(c) ? 2 : 1), 0);
+  return longueur <= 160 ? 1 : Math.ceil(longueur / 153);
+}
 
 function euros(montant) {
   return Number(montant).toLocaleString('fr-FR', { maximumFractionDigits: 0 });
@@ -43,25 +77,52 @@ function libelleCreneau(creneau, temps) {
 }
 
 const messages = {
-  /** SMS 1 — ouverture + situation professionnelle. */
+  /**
+   * SMS 1 — ouverture, situation ET garantie dans un seul message.
+   *
+   * Les deux questions étaient séparées à l'origine. Les fusionner supprime
+   * un aller-retour complet — un message sortant, une attente, une réponse
+   * entrante — sans rien perdre : ce sont deux questions fermées, et l'ordre
+   * voulu au §4 est respecté puisque le montant reste posé en dernier.
+   *
+   * Ce que la fusion économise n'est pas tant la longueur que le préambule
+   * dupliqué : présentation, désignation du bien et mention d'information ne
+   * partent plus qu'une fois.
+   */
   sms1Ouverture({ lot }) {
     const designation = [lot.reference, lot.commune].filter(Boolean).join(' / ');
     return [
-      `Bonjour, ici l'assistant automatisé de l'agence ERA Dupont Romain, au sujet de votre demande de visite pour le ${designation} à ${euros(lot.loyer_cc)} € charges comprises.`,
+      `Assistant automatisé de l'agence ERA Dupont Romain, au sujet de votre demande de visite : ${designation}, ${euros(lot.loyer_cc)} € charges comprises.`,
       '',
-      'Quelques questions rapides pour préparer votre dossier.',
+      'Deux questions, répondez avec 2 chiffres (ex. 1 3).',
       '',
-      'Votre situation ? Répondez par un chiffre :',
-      '1 — CDI ou fonctionnaire',
-      '2 — CDD ou intérim',
-      '3 — Indépendant ou profession libérale',
-      '4 — Retraité',
-      '5 — Étudiant ou apprenti',
-      '6 — Autre',
+      'Situation :',
+      '1 CDI ou fonctionnaire',
+      '2 CDD ou intérim',
+      '3 Indépendant, profession libérale',
+      '4 Retraité',
+      '5 Étudiant ou apprenti',
+      '6 Autre',
       '',
-      'Répondez CONSEILLER à tout moment pour être rappelé par un humain.',
+      'Garantie :',
+      '1 Une ou plusieurs cautions',
+      '2 Visale',
+      '3 Aucune',
+      '4 Autre (bancaire, garant payant, employeur)',
       '',
+      'CONSEILLER à tout moment pour être rappelé.',
       MENTION_RGPD,
+    ].join('\n');
+  },
+
+  /** Un seul chiffre reçu : on ne repose que la question qui manque. */
+  sms1bisGarantieSeule() {
+    return [
+      'Merci. Il me manque la garantie. Répondez par un chiffre :',
+      '1 Une ou plusieurs cautions',
+      '2 Visale (Action Logement)',
+      '3 Aucune',
+      '4 Autre (caution bancaire, garant payant, employeur)',
     ].join('\n');
   },
 
@@ -205,4 +266,4 @@ const messages = {
   },
 };
 
-module.exports = { ...messages, libelleCreneau, MENTION_RGPD, URL_MENTION, euros };
+module.exports = { ...messages, libelleCreneau, segmentsSms, MENTION_RGPD, URL_MENTION, euros };

@@ -1,13 +1,22 @@
 /**
  * WF-4 · Attribution des créneaux de visite.
  *
- * Principe arrêté (§5) : la première visite ancre le secteur. Les blocs
- * terrain démarrent vides ; le premier candidat qui réserve fixe la zone,
- * les suivants ne se voient proposer ce groupe que si leur lot est à moins
- * de 12 km de l'ancre.
+ * L'unité de regroupement est la DEMI-JOURNÉE : matin ou après-midi. Ce qui
+ * est regroupé n'est pas la visite — elles restent individuelles — mais le
+ * déplacement.
+ *
+ * Trois règles, dans cet ordre :
+ *   1. l'agenda est relu d'abord PAR RÉFÉRENCE : si le lot a déjà des
+ *      visites posées dans une demi-journée, le candidat y prend le créneau
+ *      suivant, en enchaînement direct. Un seul trajet, plusieurs candidats
+ *      reçus l'un après l'autre ;
+ *   2. sinon, une demi-journée déjà ancrée par un autre lot, à moins de
+ *      12 km ;
+ *   3. sinon, une demi-journée vide, que le candidat ouvre.
  *
  * Deux filtres distincts sur l'agenda, et c'est le point à ne pas confondre :
- *   — occupation : TOUS les événements comptent, y compris un déjeuner ;
+ *   — occupation : TOUS les événements comptent, y compris un déjeuner ou
+ *     un bloc Chantier ;
  *   — ancre      : seuls les événements portant un bloc ImmoAgenda comptent.
  * Un rendez-vous personnel occupe la place mais n'ancre aucune zone.
  */
@@ -16,8 +25,8 @@ const {
   BLOCS_TERRAIN,
   DUREE_VISITE_MIN,
   RAYON_ANCRE_KM,
-  PLAFOND_VISITES_APRES_MIDI,
-  PLAFOND_EDL_APRES_MIDI,
+  PLAFOND_VISITES_DEMI_JOURNEE,
+  PLAFOND_EDL_DEMI_JOURNEE,
   SEMAINES_RECHERCHE_MAX,
 } = require('./config');
 const T = require('./temps');
@@ -26,9 +35,9 @@ const geo = require('./geo');
 const immoagenda = require('./immoagenda');
 
 const PRIORITE = {
-  MEME_LOT: 1,      // enchaînement direct sur le lot déjà visité cet après-midi
-  PROCHE_ANCRE: 2,  // à moins de 12 km d'une ancre existante
-  NOUVELLE_ANCRE: 3, // groupe vide : le candidat ouvre le secteur
+  MEME_LOT: 1,       // enchaînement direct sur le lot déjà visité dans la demi-journée
+  PROCHE_ANCRE: 2,   // à moins de 12 km d'une ancre existante
+  NOUVELLE_ANCRE: 3, // demi-journée vide : le candidat ouvre le secteur
 };
 
 const TYPES_EDL = ["etat des lieux d'entree", 'etat des lieux de sortie'];
@@ -101,7 +110,7 @@ function proposerCreneaux({
   candidatId = null,
   nb = 2,
   rayonKm = RAYON_ANCRE_KM,
-  plafondVisites = PLAFOND_VISITES_APRES_MIDI,
+  plafondVisites = PLAFOND_VISITES_DEMI_JOURNEE,
   semainesMax = SEMAINES_RECHERCHE_MAX,
 }) {
   const feries = cal.referentielFeries(joursFeries);
@@ -113,56 +122,60 @@ function proposerCreneaux({
 
   for (let decalage = 0; decalage < semainesMax * 7; decalage += 1) {
     const jour = T.ajouterJours(debutRecherche, decalage);
-    const jourSemaine = T.champs(jour).jourSemaine;
-    const blocs = BLOCS_TERRAIN.filter((b) => b.jour === jourSemaine);
-    if (!blocs.length || !cal.estJourOuvre(jour, feries)) continue;
+    const demiJournees = BLOCS_TERRAIN.filter((b) => b.jour === T.champs(jour).jourSemaine);
+    if (!demiJournees.length || !cal.estJourOuvre(jour, feries)) continue;
 
-    const debutAM = T.aHeure(jour, Math.min(...blocs.map((b) => b.debut)), 0);
-    const finAM = T.aHeure(jour, Math.max(...blocs.map((b) => b.fin)), 0);
-    const apresMidi = lus.filter((e) => chevauche(e.debut, e.fin, debutAM, finAM));
-
-    const visites = apresMidi.filter((e) => e.estVisite).length;
-    if (visites >= plafondVisites) {
-      journaux.push({ jour: T.isoJour(jour), motif: 'plafond_visites_atteint' });
-      continue;
-    }
-
-    // Un seul EDL par après-midi ; s'il y en a un, il ancre toute la journée.
-    const edl = apresMidi.find((e) => e.estEdl) || null;
-    if (apresMidi.filter((e) => e.estEdl).length > PLAFOND_EDL_APRES_MIDI) continue;
-
-    for (const bloc of blocs) {
+    for (const bloc of demiJournees) {
       const debutBloc = T.aHeure(jour, bloc.debut, 0);
       const finBloc = T.aHeure(jour, bloc.fin, 0);
-      const metierBloc = apresMidi.filter(
-        (e) => e.estMetier && chevauche(e.debut, e.fin, debutBloc, finBloc),
-      );
+      const trace = { jour: T.isoJour(jour), groupe: bloc.groupe };
 
-      // Ancre du groupe : l'EDL de l'après-midi s'il existe, sinon le premier
-      // événement ImmoAgenda posé dans la fenêtre.
-      const ancre = edl || metierBloc[0] || null;
-      const positionAncre = ancre ? localiser(ancre, lots) : null;
-      if (ancre && !positionAncre) {
-        journaux.push({ jour: T.isoJour(jour), groupe: bloc.groupe, motif: 'ancre_non_localisee' });
+      // Occupation : tout ce qui empiète sur la demi-journée, quel qu'en
+      // soit le titre. Un bloc Chantier ou un déjeuner tient la place.
+      const dedans = lus.filter((e) => chevauche(e.debut, e.fin, debutBloc, finBloc));
+
+      const visites = dedans.filter((e) => e.estVisite).length;
+      if (visites >= plafondVisites) {
+        journaux.push({ ...trace, motif: 'plafond_visites_atteint' });
         continue;
       }
 
+      // Un seul état des lieux par demi-journée ; s'il y en a un, il ancre.
+      const etatsDesLieux = dedans.filter((e) => e.estEdl);
+      if (etatsDesLieux.length > PLAFOND_EDL_DEMI_JOURNEE) {
+        journaux.push({ ...trace, motif: 'plafond_edl_atteint' });
+        continue;
+      }
+
+      // Ancre : uniquement les événements ImmoAgenda. Le reste occupe.
+      const metier = dedans.filter((e) => e.estMetier);
+      const ancre = etatsDesLieux[0] || metier[0] || null;
+      const positionAncre = ancre ? localiser(ancre, lots) : null;
+
+      // On relit d'abord l'agenda par référence : c'est ce qui fait tenir
+      // plusieurs candidats sur un seul déplacement.
+      const memeLot = metier.filter((e) => e.reference && e.reference === lot.reference);
       const distance = positionAncre ? geo.distanceKm(positionAncre, lot) : null;
-      const memeLot = metierBloc.filter((e) => e.reference && e.reference === lot.reference);
 
       let priorite;
-      if (memeLot.length) priorite = PRIORITE.MEME_LOT;
-      else if (!ancre) priorite = PRIORITE.NOUVELLE_ANCRE;
-      else if (distance !== null && distance <= rayonKm) priorite = PRIORITE.PROCHE_ANCRE;
-      else {
-        journaux.push({
-          jour: T.isoJour(jour), groupe: bloc.groupe, motif: 'hors_rayon', distance,
-        });
+      if (memeLot.length) {
+        priorite = PRIORITE.MEME_LOT;
+      } else if (!ancre) {
+        priorite = PRIORITE.NOUVELLE_ANCRE;
+      } else if (!positionAncre) {
+        // Ancre non localisable : la règle des 12 km est invérifiable, donc
+        // on s'abstient plutôt que de proposer un déplacement au hasard.
+        journaux.push({ ...trace, motif: 'ancre_non_localisee' });
+        continue;
+      } else if (distance !== null && distance <= rayonKm) {
+        priorite = PRIORITE.PROCHE_ANCRE;
+      } else {
+        journaux.push({ ...trace, motif: 'hors_rayon', distance });
         continue;
       }
 
       // Sur le même lot, on enchaîne : le candidat prend le créneau qui suit
-      // immédiatement le dernier posé, pour un seul déplacement.
+      // immédiatement le dernier posé.
       const planche = memeLot.length
         ? memeLot.reduce((max, e) => (e.fin > max ? e.fin : max), memeLot[0].fin)
         : debutBloc;
@@ -170,11 +183,14 @@ function proposerCreneaux({
       const libre = premierCreneauLibre({
         depuis: planche < debutBloc ? debutBloc : planche,
         finBloc,
-        occupes: apresMidi,
+        occupes: dedans,
         bloques,
         maintenant: versDate(maintenant),
       });
-      if (!libre) continue;
+      if (!libre) {
+        journaux.push({ ...trace, motif: 'aucun_creneau_libre' });
+        continue;
+      }
 
       propositions.push({
         debut: libre.debut,
@@ -185,15 +201,17 @@ function proposerCreneaux({
         distance_ancre_km: distance,
         ancre: ancre ? ancre.reference : null,
         motif: {
-          [PRIORITE.MEME_LOT]: 'enchainement sur le même lot',
+          [PRIORITE.MEME_LOT]: `enchaînement sur le lot ${lot.reference}`,
           [PRIORITE.PROCHE_ANCRE]: `à ${distance} km de l'ancre`,
           [PRIORITE.NOUVELLE_ANCRE]: 'ouverture d\'un nouveau secteur',
         }[priorite],
       });
     }
 
+    // Une fois deux créneaux trouvés dont un regroupé, inutile de chercher
+    // plus loin : un déplacement isolé plus tôt ne vaut pas mieux.
     if (propositions.length >= nb && propositions.some((p) => p.priorite <= PRIORITE.PROCHE_ANCRE)) {
-      break; // inutile d'explorer plus loin : on a déjà mieux que du déplacement isolé
+      break;
     }
   }
 

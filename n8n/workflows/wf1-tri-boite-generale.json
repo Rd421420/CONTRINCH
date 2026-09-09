@@ -26,7 +26,31 @@
       "typeVersion": 1.2,
       "position": [
         -260,
-        300
+        180
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "60390d47-28aa-4e68-aac7-71e15477388e",
+      "name": "Tester l’extraction",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -480,
+        460
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Colle ici tes trente mails réels, un objet par message. Rien n'est\n// écrit en base : ce workflow te rend seulement ce que le modèle a lu.\n//\n// Le drapeau __test suit le mail jusqu'au bout de la chaîne — même filtre,\n// même invite, même modèle qu'en production. Un test qui emprunterait un\n// autre chemin ne prouverait rien.\nconst MAILS = [\n  {\n    from: { value: [{ address: 'alerte@seloger.com' }] },\n    subject: 'Nouveau contact pour votre annonce',\n    text: \"Bonjour, je souhaite visiter le bien référence 677. Vous pouvez me joindre au 06 74 70 71 10. Charline Logie\",\n  },\n  {\n    from: { value: [{ address: 'contact@leboncoin.fr' }] },\n    subject: 'Un acheteur vous a contacté',\n    text: \"Bonjour, votre appartement au Soler est-il toujours disponible ? Merci. Marc D. 0612345678\",\n  },\n  {\n    from: { value: [{ address: 'compta@fournisseur.fr' }] },\n    subject: 'Votre facture de septembre',\n    text: 'Veuillez trouver ci-joint votre facture.',\n  },\n];\n\nreturn MAILS.map((mail) => ({ json: { ...mail, __test: true } }));"
+      },
+      "id": "b177cdac-bba5-48f0-acd0-ada862630da2",
+      "name": "Mails de test",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -260,
+        460
       ]
     },
     {
@@ -44,7 +68,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Premier filtre, sans IA : expéditeurs connus et mots-clés du formulaire.\n// Il n'a pas à être fin — il est là pour éviter d'envoyer au modèle les\n// newsletters, les factures et les relances de syndic.\nconst EXPEDITEURS = [\n  'seloger', 'leboncoin', 'bienici', 'bien-ici', 'pap.fr',\n  'logic-immo', 'figaroimmo', 'avendrealouer', 'era-immobilier',\n];\nconst MOTS_CLES = [\n  'demande de visite', 'souhaite visiter', 'visiter', 'visite',\n  'votre annonce', 'reference', 'référence', 'toujours disponible',\n  'formulaire de contact', 'demande de renseignement',\n];\n\nfunction texteDe(mail) {\n  return String(mail.text || mail.textPlain || mail.snippet || mail.html || '')\n    .replace(/<[^>]+>/g, ' ')\n    .replace(/\\s+/g, ' ')\n    .trim();\n}\n\nfunction adresseDe(mail) {\n  const brut = mail.from && mail.from.value ? mail.from.value[0] : null;\n  return String((brut && brut.address) || mail.from || mail.From || '').toLowerCase();\n}\n\nconst sortie = [];\nfor (const item of $input.all()) {\n  const mail = item.json;\n  const expediteur = adresseDe(mail);\n  const sujet = String(mail.subject || '').toLowerCase();\n  const corps = texteDe(mail);\n  const recherche = `${sujet} ${corps}`.toLowerCase();\n\n  const connu = EXPEDITEURS.some((e) => expediteur.includes(e));\n  const evocateur = MOTS_CLES.some((m) => recherche.includes(m));\n  if (!connu && !evocateur) continue;\n\n  // Le modèle ne voit que ça : le corps du message, tronqué.\n  const extrait = corps.slice(0, 2000);\n\n  sortie.push({\n    json: {\n      ...mail,\n      expediteur_mail: expediteur,\n      sujet_mail: mail.subject || '',\n      corps_mail: extrait,\n      invite: [\n        \"Tu analyses un message reçu par une agence immobilière.\",\n        \"Réponds UNIQUEMENT en JSON, sans commentaire, avec ces clés :\",\n        '{\"demande_visite\": true|false, \"reference\": string|null, \"nom\": string|null, \"mobile\": string|null, \"email\": string|null}',\n        \"demande_visite vaut true seulement s'il s'agit d'une demande de visite d'un bien à louer.\",\n        \"reference est la référence du bien citée dans le message, sinon null.\",\n        \"mobile est un numéro de téléphone français, chiffres uniquement.\",\n        \"N'invente aucune valeur : mets null si l'information est absente.\",\n        '',\n        'Message :',\n        extrait,\n      ].join('\\n'),\n    },\n  });\n}\nreturn sortie;"
+        "jsCode": "// Premier filtre, sans IA : expéditeurs connus et mots-clés du formulaire.\n// Il n'a pas à être fin — il est là pour éviter d'envoyer au modèle les\n// newsletters, les factures et les relances de syndic.\nconst EXPEDITEURS = [\n  'seloger', 'leboncoin', 'bienici', 'bien-ici', 'pap.fr',\n  'logic-immo', 'figaroimmo', 'avendrealouer', 'era-immobilier',\n];\nconst MOTS_CLES = [\n  'demande de visite', 'souhaite visiter', 'visiter', 'visite',\n  'votre annonce', 'reference', 'référence', 'toujours disponible',\n  'formulaire de contact', 'demande de renseignement',\n];\n\nfunction texteDe(mail) {\n  return String(mail.text || mail.textPlain || mail.snippet || mail.html || '')\n    .replace(/<[^>]+>/g, ' ')\n    .replace(/\\s+/g, ' ')\n    .trim();\n}\n\nfunction adresseDe(mail) {\n  const brut = mail.from && mail.from.value ? mail.from.value[0] : null;\n  return String((brut && brut.address) || mail.from || mail.From || '').toLowerCase();\n}\n\nconst sortie = [];\nfor (const item of $input.all()) {\n  const mail = item.json;\n  const expediteur = adresseDe(mail);\n  const sujet = String(mail.subject || '').toLowerCase();\n  const corps = texteDe(mail);\n  const recherche = `${sujet} ${corps}`.toLowerCase();\n\n  const connu = EXPEDITEURS.some((e) => expediteur.includes(e));\n  const evocateur = MOTS_CLES.some((m) => recherche.includes(m));\n  if (!connu && !evocateur) continue;\n\n  // Le modèle ne voit que ça : le corps du message, tronqué.\n  const extrait = corps.slice(0, 2000);\n\n  sortie.push({\n    json: {\n      ...mail,\n      expediteur_mail: expediteur,\n      __test: mail.__test === true,\n      sujet_mail: mail.subject || '',\n      corps_mail: extrait,\n      invite: [\n        \"Tu analyses un message reçu par une agence immobilière.\",\n        \"Réponds UNIQUEMENT en JSON, sans commentaire, avec ces clés :\",\n        '{\"demande_visite\": true|false, \"reference\": string|null, \"nom\": string|null, \"mobile\": string|null, \"email\": string|null}',\n        \"demande_visite vaut true seulement s'il s'agit d'une demande de visite d'un bien à louer.\",\n        \"reference est la référence du bien citée dans le message, sinon null.\",\n        \"mobile est un numéro de téléphone français, chiffres uniquement.\",\n        \"N'invente aucune valeur : mets null si l'information est absente.\",\n        '',\n        'Message :',\n        extrait,\n      ].join('\\n'),\n    },\n  });\n}\nreturn sortie;"
       },
       "id": "a1d22480-ade3-4adf-aa23-40f501d81783",
       "name": "Filtre expéditeurs et mots-clés",
@@ -77,7 +101,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Sortie JSON stricte du modèle. Toute réponse illisible est ignorée :\n// un mail non trié reste dans la boîte, ce qui est le comportement voulu.\nconst sortie = [];\nconst items = $input.all();\n\nfor (let i = 0; i < items.length; i += 1) {\n  let source;\n  try {\n    source = $('Filtre expéditeurs et mots-clés').itemMatching(i).json;\n  } catch (e) {\n    source = $('Filtre expéditeurs et mots-clés').all()[i].json;\n  }\n\n  let lu = null;\n  try {\n    lu = JSON.parse(String(items[i].json.response || '{}'));\n  } catch (e) {\n    continue;\n  }\n  if (!lu || lu.demande_visite !== true) continue;\n\n  const mobile = String(lu.mobile || '').replace(/\\D/g, '');\n  sortie.push({\n    json: {\n      expediteur: source.expediteur,\n      chat_id: source.chat_id,\n      source: (source.expediteur_mail || '').split('@')[1] || 'autre',\n      nom: lu.nom || null,\n      // Le numéro français est ramené au format E.164 attendu par Twilio.\n      mobile: mobile ? (mobile.startsWith('33') ? `+${mobile}` : `+33${mobile.replace(/^0/, '')}`) : null,\n      email: lu.email || null,\n      // La virgule est retirée : elle sert de séparateur aux paramètres SQL\n      // de n8n, et une référence qui en contient décalerait la requête.\n      reference: lu.reference ? String(lu.reference).replace(/,/g, ' ').trim() : null,\n      sujet_mail: source.sujet_mail,\n    },\n  });\n}\nreturn sortie;"
+        "jsCode": "// Sortie JSON stricte du modèle. Toute réponse illisible est ignorée :\n// un mail non trié reste dans la boîte, ce qui est le comportement voulu.\nconst sortie = [];\nconst items = $input.all();\n\nfor (let i = 0; i < items.length; i += 1) {\n  let source;\n  try {\n    source = $('Filtre expéditeurs et mots-clés').itemMatching(i).json;\n  } catch (e) {\n    source = $('Filtre expéditeurs et mots-clés').all()[i].json;\n  }\n\n  let lu = null;\n  try {\n    lu = JSON.parse(String(items[i].json.response || '{}'));\n  } catch (e) {\n    continue;\n  }\n  if (!lu || lu.demande_visite !== true) continue;\n\n  const mobile = String(lu.mobile || '').replace(/\\D/g, '');\n  sortie.push({\n    json: {\n      __test: source.__test === true,\n      expediteur: source.expediteur,\n      chat_id: source.chat_id,\n      source: (source.expediteur_mail || '').split('@')[1] || 'autre',\n      nom: lu.nom || null,\n      // Le numéro français est ramené au format E.164 attendu par Twilio.\n      mobile: mobile ? (mobile.startsWith('33') ? `+${mobile}` : `+33${mobile.replace(/^0/, '')}`) : null,\n      email: lu.email || null,\n      // La virgule est retirée : elle sert de séparateur aux paramètres SQL\n      // de n8n, et une référence qui en contient décalerait la requête.\n      reference: lu.reference ? String(lu.reference).replace(/,/g, ' ').trim() : null,\n      sujet_mail: source.sujet_mail,\n    },\n  });\n}\nreturn sortie;"
       },
       "id": "54458a33-6f3c-4d60-a4c7-d474bfc64e9c",
       "name": "Lire la réponse du modèle",
@@ -107,7 +131,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Le lot est renvoyé en colonne JSON par la requête précédente : elle\n// produit toujours exactement une ligne, même sans correspondance, ce qui\n// préserve l'appariement avec les items d'entrée.\nconst sortie = [];\nconst items = $input.all();\n\nfor (let i = 0; i < items.length; i += 1) {\n  let extrait;\n  try {\n    extrait = $('Lire la réponse du modèle').itemMatching(i).json;\n  } catch (e) {\n    extrait = $('Lire la réponse du modèle').all()[i].json;\n  }\n  const lot = items[i].json.lot;\n\n  // Sans référence connue ou sans mobile, la séquence SMS ne peut pas\n  // démarrer. Le dossier part en arbitrage plutôt que d'échouer en base\n  // sur la clé étrangère ref_lot.\n  if (!lot || !extrait.mobile) {\n    sortie.push({\n      json: {\n        __action: 'telegram',\n        chat_id: extrait.chat_id,\n        texte: [\n          '<b>Demande de visite non rattachée</b>',\n          `Référence lue : ${extrait.reference || '—'}`,\n          `Nom : ${extrait.nom || '—'}`,\n          `Mobile : ${extrait.mobile || '— (absent)'}`,\n          `Objet : ${extrait.sujet_mail || '—'}`,\n          '',\n          lot ? 'Mobile manquant.' : 'Aucun lot disponible ne porte cette référence.',\n        ].join('\\n'),\n      },\n    });\n    continue;\n  }\n\n  sortie.push({\n    json: {\n      __action: 'candidat',\n      source: extrait.source,\n      nom: extrait.nom,\n      mobile: extrait.mobile,\n      email: extrait.email,\n      ref_lot: lot.reference,\n      statut: 'nouveau',\n      // Purge à 30 jours dès l'écriture : une fiche sans suite ne doit pas\n      // dépendre d'un workflow pour disparaître.\n      purge_le: new Date(Date.now() + 30 * 86400000).toISOString(),\n    },\n  });\n}\nreturn sortie;"
+        "jsCode": "// Le lot est renvoyé en colonne JSON par la requête précédente : elle\n// produit toujours exactement une ligne, même sans correspondance, ce qui\n// préserve l'appariement avec les items d'entrée.\nconst sortie = [];\nconst items = $input.all();\n\nfor (let i = 0; i < items.length; i += 1) {\n  let extrait;\n  try {\n    extrait = $('Lire la réponse du modèle').itemMatching(i).json;\n  } catch (e) {\n    extrait = $('Lire la réponse du modèle').all()[i].json;\n  }\n  const lot = items[i].json.lot;\n\n  // Mode test : on rend compte de ce que le modèle a lu, et on n'écrit\n  // rien. C'est le même filtre et la même invite qu'en production — sans\n  // cela le test ne prouverait rien.\n  if (extrait.__test) {\n    sortie.push({\n      json: {\n        __action: 'rapport',\n        objet: extrait.sujet_mail,\n        expediteur: extrait.source,\n        reference_lue: extrait.reference || null,\n        lot_trouve: lot ? lot.reference : null,\n        nom: extrait.nom || null,\n        mobile: extrait.mobile || null,\n        email: extrait.email || null,\n        verdict: !lot\n          ? (extrait.reference ? 'référence inconnue en base' : 'aucune référence lue')\n          : (!extrait.mobile ? 'mobile manquant' : 'exploitable'),\n      },\n    });\n    continue;\n  }\n\n  // Sans référence connue ou sans mobile, la séquence SMS ne peut pas\n  // démarrer. Le dossier part en arbitrage plutôt que d'échouer en base\n  // sur la clé étrangère ref_lot.\n  if (!lot || !extrait.mobile) {\n    sortie.push({\n      json: {\n        __action: 'telegram',\n        chat_id: extrait.chat_id,\n        texte: [\n          '<b>Demande de visite non rattachée</b>',\n          `Référence lue : ${extrait.reference || '—'}`,\n          `Nom : ${extrait.nom || '—'}`,\n          `Mobile : ${extrait.mobile || '— (absent)'}`,\n          `Objet : ${extrait.sujet_mail || '—'}`,\n          '',\n          lot ? 'Mobile manquant.' : 'Aucun lot disponible ne porte cette référence.',\n        ].join('\\n'),\n      },\n    });\n    continue;\n  }\n\n  sortie.push({\n    json: {\n      __action: 'candidat',\n      source: extrait.source,\n      nom: extrait.nom,\n      mobile: extrait.mobile,\n      email: extrait.email,\n      ref_lot: lot.reference,\n      statut: 'nouveau',\n      // Purge à 30 jours dès l'écriture : une fiche sans suite ne doit pas\n      // dépendre d'un workflow pour disparaître.\n      purge_le: new Date(Date.now() + 30 * 86400000).toISOString(),\n    },\n  });\n}\nreturn sortie;"
       },
       "id": "74044932-ecfa-4bce-aa0d-b0e6940a8ee9",
       "name": "Préparer la fiche",
@@ -191,9 +215,65 @@
         1500,
         420
       ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Une ligne par mail retenu par le filtre. Les mails écartés en amont\n// n'apparaissent pas : c'est aussi une information, compare le nombre de\n// lignes au nombre de mails collés.\nreturn $input.all()\n  .filter((item) => item.json.__action === 'rapport')\n  .map((item) => {\n    const { __action, ...reste } = item.json;\n    return { json: reste };\n  });"
+      },
+      "id": "35366fa8-b517-47aa-af6e-f1d26c2de0d6",
+      "name": "Rapport d’extraction",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1280,
+        640
+      ]
     }
   ],
   "connections": {
+    "Tester l’extraction": {
+      "main": [
+        [
+          {
+            "node": "Mails de test",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mails de test": {
+      "main": [
+        [
+          {
+            "node": "Paramètres",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Préparer la fiche": {
+      "main": [
+        [
+          {
+            "node": "Rapport d’extraction",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Branche — nouveau candidat",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Branche — arbitrage",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
     "Boîte générale": {
       "main": [
         [
@@ -254,22 +334,6 @@
         [
           {
             "node": "Préparer la fiche",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Préparer la fiche": {
-      "main": [
-        [
-          {
-            "node": "Branche — nouveau candidat",
-            "type": "main",
-            "index": 0
-          },
-          {
-            "node": "Branche — arbitrage",
             "type": "main",
             "index": 0
           }

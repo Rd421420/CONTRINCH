@@ -61,6 +61,12 @@ workflows qui écoutent le même jeton se volent les mises à jour.
 
 Dans l'ordre de la checklist du §8 :
 
+- WF-1 en manuel, déclencheur « Tester l'extraction » : colle tes trente
+  mails réels dans le node « Mails de test » et lis le « Rapport
+  d'extraction ». Rien n'est écrit en base, et le chemin emprunté est
+  exactement celui de la production — même filtre, même invite, même modèle.
+  Compare le nombre de lignes du rapport au nombre de mails collés : la
+  différence, ce sont les mails écartés par le premier filtre
 - WF-3 en manuel, sur vingt dossiers passés dont tu connais l'issue
 - WF-4 en manuel : le journal renvoyé dit pourquoi chaque après-midi a été
   écarté (plafond, hors rayon, ancre non localisée)

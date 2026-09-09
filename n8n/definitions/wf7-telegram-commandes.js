@@ -29,8 +29,8 @@ function repondre(contenu) {
 
 const AIDE = [
   '<b>Lots</b>',
-  '/lot RÉF COMMUNE TYPE LOYER [visale-ok] [zone1|zone2|zone3]',
-  '   ex. <code>/lot 12345 Le Soler T3 780 visale-ok zone3</code>',
+  '/lot RÉF COMMUNE TYPE LOYER [visale-ok]',
+  '   ex. <code>/lot 12345 Le Soler T3 780 visale-ok</code>',
   '/loue RÉF — sort le bien de la liste des disponibles',
   '',
   '<b>Dossiers</b>',
@@ -80,8 +80,12 @@ if (!lot) return repondre(AIDE);
 const mots = lot[1].trim().split(/\\s+/);
 const reference = mots.shift();
 
+// Pas de zone Visale : le portefeuille tient sur un même secteur, et le
+// plafond n'est jamais atteint. Le seul drapeau qui compte est de savoir
+// si le propriétaire accepte Visale — sinon c'est la GLI, et les deux ne
+// se cumulent pas.
 const drapeaux = [];
-while (mots.length && /^(visale-ok|visale-non|zone[123])$/i.test(mots[mots.length - 1])) {
+while (mots.length && /^(visale-ok|visale-non)$/i.test(mots[mots.length - 1])) {
   drapeaux.push(mots.pop().toLowerCase());
 }
 
@@ -98,8 +102,6 @@ if (!commune || !Number.isFinite(loyer_cc)) {
   return repondre('Commune ou loyer illisible.\\n' + AIDE);
 }
 
-const zone = drapeaux.find((d) => /^zone[123]$/.test(d));
-
 return [{
   json: {
     __action: 'lot',
@@ -111,7 +113,6 @@ return [{
     // Sans ce champ, le système proposerait Visale sur des lots où le
     // propriétaire a pris la GLI — les deux ne se cumulent pas.
     accepte_visale: drapeaux.includes('visale-ok'),
-    zone_visale: zone ? Number(zone.slice(4)) : null,
   },
 }];`;
 
@@ -149,7 +150,6 @@ return [{
     type_lot: demande.type_lot,
     loyer_cc: demande.loyer_cc,
     accepte_visale: demande.accepte_visale,
-    zone_visale: demande.zone_visale,
     latitude,
     longitude,
     statut: 'disponible',
@@ -168,7 +168,6 @@ return $input.all().map((item) => {
         \`<b>Lot \${lot.reference} enregistré</b>\`,
         \`\${lot.commune} \${lot.code_postal || ''} · \${lot.type_lot} · \${lot.loyer_cc} € CC\`,
         \`Visale : \${lot.accepte_visale ? 'acceptée' : 'non (GLI)'}\`,
-        lot.zone_visale ? \`Zone Visale : \${lot.zone_visale}\` : 'Zone Visale : à relever',
       ].join('\\n'),
     },
   };

@@ -54,22 +54,23 @@ function textes(trace) {
 const CANDIDAT_RDV = { etape_sms: ETAPE.CRENEAU, statut: 'en_cours', verdict: 'eligible' };
 
 test('parcours nominal CDI sans garantie : verdict favorable puis rendez-vous posé', () => {
-  const { candidat, trace } = conversation(['1', '3', '2500', '0', 'A']);
+  const { candidat, trace } = conversation(['1 3', '2500', '0', 'A']);
 
   assert.equal(candidat.situation, 'cdi');
   assert.equal(candidat.garantie, 'aucune');
   assert.equal(candidat.revenus_nets, 2500);
   assert.equal(candidat.verdict, 'eligible');
   assert.equal(candidat.statut, 'rdv_pose');
-  assert.deepEqual(textes(trace), ['sms1', 'sms2', 'sms3', 'sms3bis', 'sms4a', 'sms5']);
+  assert.deepEqual(textes(trace), ['sms1', 'sms3', 'sms3bis', 'sms4a', 'sms5'],
+    'la fusion supprime un aller-retour complet du parcours nominal');
 });
 
 test('les revenus complémentaires font basculer un dossier limite', () => {
-  const refuse = conversation(['1', '3', '1750', '0']).candidat;
+  const refuse = conversation(['1 3', '1750', '0']).candidat;
   assert.equal(refuse.verdict, 'hors_criteres');
   assert.equal(refuse.statut, 'arbitrage');
 
-  const retenu = conversation(['1', '3', '1750', '250']).candidat;
+  const retenu = conversation(['1 3', '1750', '250']).candidat;
   assert.equal(retenu.verdict, 'eligible');
   assert.equal(retenu.capacite_loyer, 710);
 });
@@ -83,15 +84,15 @@ test('CDD : la question de durée s’intercale, et 12 mois arrête la séquence
 });
 
 test('CDD de plus de 12 mois : la séquence continue normalement', () => {
-  const { candidat } = conversation(['2', 'OUI', '3', '3000', '0', 'B']);
+  const { candidat } = conversation(['2 3', 'OUI', '3000', '0', 'B']);
   assert.equal(candidat.duree_contrat_mois, 24);
   assert.equal(candidat.verdict, 'eligible');
   assert.equal(candidat.statut, 'rdv_pose');
 });
 
 test('caution : le nombre est demandé avant les montants', () => {
-  const { candidat, trace } = conversation(['5', '1', '2', '1500 et 1600', '0', '0', 'A']);
-  assert.deepEqual(textes(trace).slice(0, 5), ['sms1', 'sms2', 'sms2bis', 'sms2ter', 'sms3']);
+  const { candidat, trace } = conversation(['5 1', '2', '1500 et 1600', '0', '0', 'A']);
+  assert.deepEqual(textes(trace).slice(0, 4), ['sms1', 'sms2bis', 'sms2ter', 'sms3']);
   assert.equal(candidat.nb_cautions, 2);
   assert.deepEqual(candidat.revenus_cautions, [1500, 1600]);
   // Deux cautions à 1 500 et 1 600 € pour un loyer de 700 € : seuil 1 400 € par tête.
@@ -99,42 +100,42 @@ test('caution : le nombre est demandé avant les montants', () => {
 });
 
 test('pluralité de cautions : une seule caution faible suffit à écarter le dossier', () => {
-  const { candidat } = conversation(['5', '1', '2', '1500 et 1100', '0', '0']);
+  const { candidat } = conversation(['5 1', '2', '1500 et 1100', '0', '0']);
   assert.equal(candidat.verdict, 'hors_criteres');
   assert.equal(candidat.statut, 'arbitrage');
 });
 
 test('Visale avec visa : le montant du visa est demandé et tranche', () => {
-  const { candidat, trace } = conversation(['1', '2', 'OUI', '600', '2500', '0']);
-  assert.deepEqual(textes(trace).slice(0, 5), ['sms1', 'sms2', 'sms2quater', 'sms2quinquies', 'sms3']);
+  const { candidat, trace } = conversation(['1 2', 'OUI', '600', '2500', '0']);
+  assert.deepEqual(textes(trace).slice(0, 4), ['sms1', 'sms2quater', 'sms2quinquies', 'sms3']);
   assert.equal(candidat.visale_montant_visa, 600);
   assert.equal(candidat.verdict, 'hors_criteres'); // visa de 600 € pour un loyer de 700 €
 });
 
 test('Visale sans visa : verdict de pré-vérification, message sous réserve', () => {
-  const { candidat, trace } = conversation(['1', '2', 'NON', '2000', '0']);
+  const { candidat, trace } = conversation(['1 2', 'NON', '2000', '0']);
   assert.equal(candidat.verdict, 'a_verifier_visale');
   const sms4a = trace.flatMap((e) => e.envois).find((e) => e.type === 'sms4a');
   assert.match(sms4a.texte, /sous réserve de l'obtention de votre visa/);
 });
 
 test('garantie « autre » : sortie immédiate vers Telegram, aucun calcul', () => {
-  const { candidat, trace } = conversation(['1', '4']);
+  const { candidat, trace } = conversation(['1 4']);
   assert.equal(candidat.verdict, 'a_qualifier');
-  assert.deepEqual(textes(trace), ['sms1', 'sms2', 'sms4b']);
+  assert.deepEqual(textes(trace), ['sms1', 'sms4b']);
   assert.equal(trace.at(-1).sortie.motif, 'garantie_hors_grille');
 });
 
 test('la question du foyer n’est posée qu’aux retraités', () => {
   // Retraité, T3, 1 300 € pour un loyer de 700 € : le taux d'effort ne passe
   // pas (capacité 481 €) mais la dérogation reste à vivre, oui — 600 € > 550 €.
-  const retraite = conversation(['4', '3', '1300', '0', 'seul']);
+  const retraite = conversation(['4 3', '1300', '0', 'seul']);
   assert.ok(textes(retraite.trace).includes('sms3ter'));
   assert.equal(retraite.candidat.couple, false);
   assert.equal(retraite.candidat.verdict, 'eligible');
 
   // En couple, le seuil monte à 900 € : le même dossier part en arbitrage.
-  const couple = conversation(['4', '3', '1300', '0', 'en couple']);
+  const couple = conversation(['4 3', '1300', '0', 'en couple']);
   assert.equal(couple.candidat.verdict, 'hors_criteres');
   const cdi = conversation(['1', '3', '2500', '0', 'A']);
   assert.equal(textes(cdi.trace).includes('sms3ter'), false);
@@ -149,7 +150,7 @@ test('la dernière réponse est écrite en base, pas seulement utilisée pour le
 });
 
 test('CONSEILLER sort de la séquence à n’importe quel moment', () => {
-  for (const position of [[], ['1'], ['1', '3'], ['1', '3', '2500']]) {
+  for (const position of [[], ['1'], ['1 3'], ['1 3', '2500']]) {
     const { candidat, trace } = conversation([...position, 'CONSEILLER']);
     assert.equal(candidat.verdict, 'a_qualifier');
     assert.equal(candidat.statut, 'arbitrage');
@@ -167,7 +168,7 @@ test('filet de sécurité : deux réponses incomprises d’affilée basculent su
   const { candidat, trace } = conversation(['1', 'je ne sais pas trop', 'ça dépend']);
   assert.equal(candidat.statut, 'arbitrage');
   assert.equal(trace.at(-1).sortie.motif, 'reponses_incomprises');
-  assert.deepEqual(textes(trace), ['sms1', 'sms2', 'incompris', 'sms4b']);
+  assert.deepEqual(textes(trace), ['sms1', 'sms1bis_garantie', 'incompris', 'sms4b']);
 });
 
 test('une réponse comprise remet le compteur d’échecs à zéro', () => {
@@ -209,17 +210,17 @@ test('collision à la confirmation : deux nouveaux créneaux, jamais un échec',
 });
 
 test('AUTRE sur les créneaux : arbitrage humain, pas d’abandon', () => {
-  const { candidat, trace } = conversation(['1', '3', '2500', '0', 'AUTRE']);
+  const { candidat, trace } = conversation(['1 3', '2500', '0', 'AUTRE']);
   assert.equal(candidat.statut, 'arbitrage');
   assert.equal(trace.at(-1).sortie.motif, 'creneaux_refuses');
 });
 
 test('aucun message envoyé au candidat n’annonce un refus', () => {
   const parcours = [
-    ['1', '3', '900', '0'],          // hors critères
-    ['2', 'NON'],                     // non assurable
-    ['1', '4'],                       // hors grille
-    ['1', '3', 'bla', 'bla'],         // incompris
+    ['1 3', '900', '0'],       // hors critères
+    ['2', 'NON'],              // non assurable
+    ['1 4'],                   // hors grille
+    ['1 3', 'bla', 'bla'],     // incompris
   ];
   for (const reponses of parcours) {
     const { trace } = conversation(reponses);
@@ -246,4 +247,44 @@ test('les créneaux relus en base arrivent en chaînes ISO, pas en objets Date',
   assert.equal(etape.patch.statut, 'rdv_pose');
   assert.ok(etape.creneauRetenu.debut instanceof Date);
   assert.match(etape.envois[0].texte, /mercredi 09\/09 à 14h/);
+});
+
+test('la fusion accepte les deux chiffres, et ne repose que ce qui manque', () => {
+  const fusionne = conversation(['1 3', '2500', '0', 'A']);
+  assert.equal(fusionne.candidat.situation, 'cdi');
+  assert.equal(fusionne.candidat.garantie, 'aucune');
+  assert.equal(fusionne.candidat.statut, 'rdv_pose');
+
+  // Un seul chiffre n'est pas un échec : on repose la seule question qui
+  // manque, plutôt que de faire payer au candidat une erreur de format.
+  const partiel = conversation(['1', '3', '2500', '0', 'A']);
+  assert.deepEqual(textes(partiel.trace).slice(0, 2), ['sms1', 'sms1bis_garantie']);
+  assert.equal(partiel.candidat.situation, 'cdi');
+  assert.equal(partiel.candidat.garantie, 'aucune');
+  assert.equal(partiel.candidat.statut, 'rdv_pose');
+});
+
+test('CDD : la durée passe avant la garantie, même donnée d’emblée', () => {
+  // La durée est une exclusion sèche : rien ne sert d'instruire un dossier
+  // qu'elle écarte. La garantie déjà reçue n'est pas redemandée pour autant.
+  const { candidat, trace } = conversation(['2 1', 'OUI', '2', '1500 et 1600', '3000', '0', 'A']);
+  assert.deepEqual(textes(trace).slice(0, 4), ['sms1', 'sms1bis', 'sms2bis', 'sms2ter']);
+  assert.equal(candidat.garantie, 'caution');
+  assert.equal(candidat.duree_contrat_mois, 24);
+});
+
+test('le message d’ouverture reste dans un budget de segments tenable', () => {
+  const { segmentsSms, sms1Ouverture } = require('../src/messages');
+  const texte = sms1Ouverture({ lot: { reference: '677', commune: 'SAINT CYPRIEN', loyer_cc: 508 } });
+
+  // Les accents font basculer le message en UCS-2 : 67 caractères par
+  // segment concaténé, contre 153 en GSM-7. C'est le message le plus cher
+  // du dispositif, et le seul qui porte la mention d'information.
+  assert.ok(segmentsSms(texte) <= 9, `${segmentsSms(texte)} segments`);
+  assert.ok(texte.length < 620, `${texte.length} caractères`);
+
+  // Les messages courants, eux, doivent tenir en peu de segments.
+  const M = require('../src/messages');
+  assert.ok(segmentsSms(M.sms4bTransmis()) <= 2);
+  assert.ok(segmentsSms(M.attenteArbitrage()) <= 3);
 });
