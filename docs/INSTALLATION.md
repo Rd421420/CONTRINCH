@@ -64,6 +64,33 @@ créé s'il n'existe pas ; rien d'autre dans la base n'est touché.
  locatif | refus_log         | table
 ```
 
+### Contrôle automatique
+
+Sur une base **jetable**, un script vérifie d'un coup le schéma et les
+requêtes des workflows :
+
+```bash
+createdb era_verif
+node scripts/verifier-base.js --base era_verif
+dropdb era_verif
+```
+
+Il applique les trois migrations **deux fois** (elles doivent être
+rejouables), fait préparer les 21 requêtes des workflows par PostgreSQL
+lui-même — ce qui valide syntaxe, noms de tables, de colonnes et types de
+paramètres — puis vérifie que chaque champ écrit par les nodes correspond à
+une vraie colonne. C'est ce dernier point qui attrape le mode d'échec des
+nodes Postgres en « autoMapInputData » : une clé qui n'est pas une colonne
+ne se voit qu'à l'exécution.
+
+Sortie attendue :
+
+```
+OK    3 migrations, appliquées deux fois — rejouables
+OK    21 requêtes de workflow préparées par PostgreSQL
+OK    6 tables d'écriture, toutes les colonnes présentes
+```
+
 **Avant d'aller plus loin :** vérifie que la sauvegarde du VPS couvre bien
 le schéma `locatif`. Une base perdue, ce sont les rendez-vous en cours et
 les séquences SMS en vol. C'est le moment de le faire, pas après.

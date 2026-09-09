@@ -13,7 +13,8 @@
     "jours-feries": "node scripts/charger-jours-feries.js",
     "n8n:build": "node n8n/build.js",
     "n8n:verifier": "node n8n/build.js --verifier",
-    "n8n:importer": "node scripts/importer-workflows.js"
+    "n8n:importer": "node scripts/importer-workflows.js",
+    "verifier:base": "node scripts/verifier-base.js"
   },
   "license": "UNLICENSED"
 }

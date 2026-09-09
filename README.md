@@ -13,6 +13,7 @@ arbitrage humain, et c'est Romain qui décide puis qui écrit au candidat.
 npm test            # 134 tests, aucune dépendance externe
 npm run n8n:build   # régénère les 12 workflows n8n depuis src/
 npm run n8n:importer -- --essai   # les pousse dans n8n par son API
+npm run verifier:base -- --base era_verif   # schéma + requêtes, sur un vrai PostgreSQL
 ```
 
 Node 20 ou plus. Aucun `node_modules` : tout tourne sur la bibliothèque standard.
