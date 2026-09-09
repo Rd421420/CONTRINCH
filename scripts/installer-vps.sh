@@ -84,6 +84,35 @@ fi
 # ---------------------------------------------------------------------
 etape "3. La base $BASE"
 
+# Sur une installation Debian, seul le rôle « postgres » existe au départ,
+# et l'authentification locale est en « peer » : root n'a aucun rôle. C'est
+# la première chose sur laquelle on butte, autant la diagnostiquer.
+DIAGNOSTIC="$(psql -lqt 2>&1 >/dev/null || true)"
+if printf '%s' "$DIAGNOSTIC" | grep -q 'role .* does not exist'; then
+  UTILISATEUR="$(id -un)"
+  cat >&2 <<AIDE
+
+   ÉCHEC PostgreSQL ne connaît aucun rôle « $UTILISATEUR ».
+
+   C'est le comportement normal d'une installation Debian ou Ubuntu :
+   seul le rôle « postgres » existe, et l'authentification locale est en
+   « peer » — le nom du compte système doit correspondre au rôle.
+
+   Crée le rôle applicatif — c'est aussi celui dont n8n aura besoin —
+   puis la base, et relance :
+
+     sudo -u postgres psql -c "CREATE ROLE era LOGIN PASSWORD 'À_CHANGER';"
+     sudo -u postgres createdb -O era $BASE
+
+     export PGHOST=127.0.0.1 PGUSER=era PGPASSWORD='À_CHANGER' PGDATABASE=$BASE
+     BASE=$BASE ./scripts/installer-vps.sh
+
+   Garde ce mot de passe : c'est celui de l'identifiant Postgres dans n8n.
+
+AIDE
+  exit 1
+fi
+
 if psql -lqt 2>/dev/null | cut -d'|' -f1 | grep -qw "$BASE"; then
   ok "base $BASE déjà présente"
 else

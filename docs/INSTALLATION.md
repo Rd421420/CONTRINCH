@@ -64,6 +64,33 @@ l'environnement Node (il faut la version 20 au minimum).
 
 ## Étape 1 — La base de données
 
+### Le rôle PostgreSQL, d'abord
+
+Sur Debian et Ubuntu, PostgreSQL ne connaît au départ que le rôle
+`postgres`, et l'authentification locale est en « peer » : le nom du compte
+système doit correspondre au rôle. En root, `createdb` répond donc
+`role "root" does not exist`.
+
+Crée le rôle applicatif — **c'est aussi celui dont n8n aura besoin**, autant
+le faire une bonne fois :
+
+```bash
+sudo -u postgres psql -c "CREATE ROLE era LOGIN PASSWORD 'À_CHANGER';"
+sudo -u postgres createdb -O era verif_loc
+```
+
+Puis, dans le shell qui lancera la suite :
+
+```bash
+export PGHOST=127.0.0.1 PGUSER=era PGPASSWORD='À_CHANGER' PGDATABASE=verif_loc
+psql -c '\conninfo'
+```
+
+`\conninfo` doit répondre « connected to database verif_loc as user era ».
+
+**Garde ce mot de passe** : c'est celui de l'identifiant Postgres à saisir
+dans n8n à l'étape 4.
+
 ### La voie courte
 
 Un script enchaîne les étapes 1 à 3 et le contrôle, avec une vérification
