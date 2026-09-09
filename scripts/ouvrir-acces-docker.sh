@@ -50,16 +50,52 @@ fi
 echo "Réseaux      : $(echo "$RESEAUX" | tr '\n' ' ')"
 echo
 
+# --- inventaire, pour viser juste ---------------------------------------
+BASES="$($PSQL -c "SELECT string_agg(datname, ' ') FROM pg_database WHERE NOT datistemplate")"
+ROLES="$($PSQL -c "SELECT string_agg(rolname, ' ') FROM pg_roles WHERE rolcanlogin")"
+echo "Bases        : $BASES"
+echo "Rôles        : $ROLES"
+
+if command -v docker >/dev/null 2>&1; then
+  echo
+  echo "Conteneurs et leurs réseaux — c'est de là que viennent les connexions :"
+  for conteneur in $(docker ps --format '{{.Names}}' 2>/dev/null); do
+    docker inspect "$conteneur" --format \
+      '{{range $reseau, $config := .NetworkSettings.Networks}}   {{printf "%-16s" $reseau}} adresse {{printf "%-14s" $config.IPAddress}} passerelle {{$config.Gateway}}
+{{end}}' 2>/dev/null | sed "s/^   /   $conteneur : /"
+  done
+fi
+echo
+
 # --- règles déjà présentes ---------------------------------------------
 echo "Règles actuelles :"
 grep -vE '^\s*#|^\s*$' "$HBA" | sed 's/^/   /'
 echo
 
 # --- ce qu'il manque ----------------------------------------------------
+#
+# Le contrôle passe par pg_hba_file_rules, la lecture que PostgreSQL fait
+# lui-même du fichier. Un simple grep sur l'adresse conclurait à tort
+# qu'un réseau est couvert alors que la règle vise une AUTRE base ou un
+# AUTRE rôle — c'est exactement ce qui arrive quand un n8n_user est déjà
+# déclaré sur les mêmes réseaux.
+couvert() {
+  local reseau_base="${1%%/*}"
+  local trouve
+  trouve="$($PSQL -c "
+    SELECT count(*) FROM pg_hba_file_rules
+    WHERE type = 'host'
+      AND error IS NULL
+      AND address = '$reseau_base'
+      AND (database @> ARRAY['all'] OR database @> ARRAY['$BASE'])
+      AND (user_name @> ARRAY['all'] OR user_name @> ARRAY['$ROLE'])")"
+  [ "$trouve" != "0" ]
+}
+
 A_AJOUTER=""
 for reseau in $RESEAUX; do
-  if grep -qE "^\s*host\s+.*\s${reseau//./\\.}\s" "$HBA"; then
-    echo "   déjà couvert : $reseau"
+  if couvert "$reseau"; then
+    echo "   déjà couvert pour $BASE / $ROLE : $reseau"
   else
     A_AJOUTER="$A_AJOUTER $reseau"
   fi
