@@ -1,0 +1,14 @@
+{
+  "name": "era-preetude-solvabilite",
+  "version": "0.1.0",
+  "description": "Pré-étude de solvabilité et prise de rendez-vous — ERA Dupont Romain",
+  "private": true,
+  "type": "commonjs",
+  "main": "src/index.js",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "test": "node --test test/",
+    "jours-feries": "node scripts/charger-jours-feries.js"
+  },
+  "license": "UNLICENSED"
+}
