@@ -8,6 +8,35 @@ avant la phase 8 : jusque-là, aucun SMS ne peut partir, même par erreur.
 
 ---
 
+## Node est-il nécessaire ?
+
+**Pas pour créer la base.** Les étapes 1 à 3 ne demandent que `psql`,
+`curl` et `python3`.
+
+Node sert à trois choses, et **aucune ne doit tourner sur le serveur** :
+
+| Quoi | Où le lancer |
+|---|---|
+| `npm test` | ton poste, ou le serveur |
+| `verifier-base.js` | tout poste qui atteint la base |
+| `importer-workflows.js` | tout poste qui atteint n8n en HTTPS |
+
+Si Node manque sur le VPS, l'installeur s'en accommode : il crée la base et
+saute les deux contrôles en te disant comment les rejouer ailleurs.
+
+Pour l'installer quand même, sur Debian ou Ubuntu :
+
+```bash
+curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
+sudo apt-get install -y nodejs
+node -v && npm -v
+```
+
+`apt install nodejs` sans ce dépôt donne une version trop ancienne sur la
+plupart des distributions.
+
+---
+
 ## Avant de commencer
 
 À avoir sous la main :
@@ -121,11 +150,15 @@ Le J+2 ouvré, la plage d'envoi et le compteur de blocage lisent tous cette
 table. Sans elle, ils traitent les jours fériés comme des jours ouvrés.
 
 ```bash
-node scripts/charger-jours-feries.js | psql -d era_loyers
+./scripts/charger-jours-feries.sh | psql -d era_loyers    # sans Node
+node scripts/charger-jours-feries.js | psql -d era_loyers # si Node est là
 ```
 
 Le script interroge l'API Etalab (gratuite, sans clé) et produit du SQL.
 Tu peux le lancer sans le tuyau pour voir ce qu'il va écrire.
+
+La version `.sh` ne demande que `curl` et `python3`, présents sur toute
+distribution : **la création de la base n'a besoin ni de Node ni de npm.**
 
 **Vérification :**
 

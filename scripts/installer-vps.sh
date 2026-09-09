@@ -34,13 +34,26 @@ faire() { if [ "$ESSAI" = 1 ]; then printf '   [essai] %s\n' "$*"; else eval "$@
 # ---------------------------------------------------------------------
 etape "1. Préalables"
 
-command -v node >/dev/null || echec "node absent — il faut Node 20 ou plus"
-VERSION_NODE="$(node -p 'process.versions.node.split(".")[0]')"
-[ "$VERSION_NODE" -ge 20 ] || echec "Node $VERSION_NODE — il en faut 20 au minimum"
-ok "Node $(node -v)"
-
 command -v psql >/dev/null || echec "psql absent — installer le client PostgreSQL"
 ok "psql présent"
+
+# Node n'est pas nécessaire pour créer la base : psql suffit, et le
+# chargement des jours fériés a une version shell. Il ne sert qu'aux tests
+# et au contrôle des requêtes, qui peuvent tourner depuis un autre poste.
+AVEC_NODE=0
+if command -v node >/dev/null; then
+  VERSION_NODE="$(node -p 'process.versions.node.split(".")[0]')"
+  if [ "$VERSION_NODE" -ge 20 ]; then
+    AVEC_NODE=1
+    ok "Node $(node -v)"
+  else
+    info "Node $VERSION_NODE : trop ancien, il en faut 20. Tests et contrôle sautés."
+  fi
+else
+  info "Node absent — la base se crée quand même, seuls les tests et le"
+  info "contrôle des requêtes sont sautés. Ils tournent depuis n'importe"
+  info "quel poste : voir la fin de ce message."
+fi
 
 if command -v ollama >/dev/null; then
   if ollama list 2>/dev/null | grep -q 'qwen2.5:3b-instruct'; then
@@ -56,10 +69,9 @@ fi
 # ---------------------------------------------------------------------
 etape "2. Le socle, tel qu'il est livré"
 
-if [ -d node_modules ] || [ -f package-lock.json ]; then
-  info "aucune dépendance à installer : le projet n'en a pas"
-fi
-if [ "$ESSAI" = 1 ]; then
+if [ "$AVEC_NODE" = 0 ]; then
+  info "sauté, faute de Node"
+elif [ "$ESSAI" = 1 ]; then
   info "[essai] npm test"
 else
   npm test >/tmp/era-tests.log 2>&1 || {
@@ -94,10 +106,17 @@ fi
 # ---------------------------------------------------------------------
 etape "4. Les jours fériés"
 
-if [ "$ESSAI" = 1 ]; then
-  info "[essai] node scripts/charger-jours-feries.js | psql -d $BASE"
+# La version shell ne demande que curl et python3 : elle passe partout.
+if [ -x scripts/charger-jours-feries.sh ]; then
+  CHARGEUR="./scripts/charger-jours-feries.sh"
 else
-  if node scripts/charger-jours-feries.js > /tmp/era-feries.sql 2>/tmp/era-feries.err; then
+  CHARGEUR="node scripts/charger-jours-feries.js"
+fi
+
+if [ "$ESSAI" = 1 ]; then
+  info "[essai] $CHARGEUR | psql -d $BASE"
+else
+  if $CHARGEUR > /tmp/era-feries.sql 2>/tmp/era-feries.err; then
     psql -d "$BASE" -v ON_ERROR_STOP=1 -q -f /tmp/era-feries.sql
     ANNEE="$(psql -d "$BASE" -At -c "SELECT extract(year FROM max(jour)) FROM locatif.jours_feries")"
     ok "référentiel chargé, couvert jusqu'en ${ANNEE%.*}"
@@ -105,7 +124,7 @@ else
     info "API Etalab injoignable : $(head -1 /tmp/era-feries.err)"
     info "sans ce référentiel, le J+2 et le compteur de blocage traitent"
     info "les jours fériés comme des jours ouvrés — à relancer plus tard :"
-    info "  node scripts/charger-jours-feries.js | psql -d $BASE"
+    info "  $CHARGEUR | psql -d $BASE"
   fi
 fi
 
@@ -128,7 +147,10 @@ fi
 # ---------------------------------------------------------------------
 etape "6. Contrôle du schéma et des requêtes"
 
-if [ "$ESSAI" = 1 ]; then
+if [ "$AVEC_NODE" = 0 ]; then
+  info "sauté, faute de Node. À lancer depuis un poste qui en a :"
+  info "  node scripts/verifier-base.js --base $BASE"
+elif [ "$ESSAI" = 1 ]; then
   info "[essai] node scripts/verifier-base.js --base $BASE"
 else
   node scripts/verifier-base.js --base "$BASE" || echec "le contrôle a relevé des écarts"
@@ -140,6 +162,11 @@ cat <<FIN
 $( [ "$ESSAI" = 1 ] && echo "Essai terminé : rien n'a été écrit." || echo "Préalables terminés." )
 
 Il reste, dans l'ordre :
+
+  0. Si Node manque sur ce serveur, ce n'est pas bloquant : les tests,
+     le contrôle des requêtes et l'import des workflows tournent depuis
+     n'importe quel poste. L'import parle à n8n en HTTPS, il n'a pas
+     besoin d'être sur le serveur.
 
   1. Importer les workflows dans n8n
        n8n → Settings → API → Create an API key
