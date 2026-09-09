@@ -87,6 +87,23 @@ passent sans qu'aucun rôle ni mot de passe n'ait à être créé.
 Le rôle applicatif reste nécessaire, mais **plus tard** : c'est n8n qui en
 aura besoin pour se connecter. Voir ci-dessous.
 
+### Après une installation en mode socket : donner la base au rôle
+
+En mode `SOCKET=1`, `psql` tourne sous le compte `postgres`, qui se
+retrouve **propriétaire de tout**. Le rôle avec lequel n8n se connectera
+n'a alors aucun droit — il reçoit `permission denied for schema locatif`.
+
+Une commande le corrige, après avoir créé le rôle :
+
+```bash
+sudo -u postgres psql -c "CREATE ROLE era LOGIN PASSWORD 'ÀChanger';"
+./scripts/attribuer-role.sh verif_loc era
+```
+
+Le script transfère la base, le schéma, les huit tables, leurs séquences et
+la fonction de purge. Il vérifie qu'il ne reste rien, et se relance sans
+risque.
+
 ### Le rôle applicatif, pour n8n
 
 Sur Debian et Ubuntu, PostgreSQL ne connaît au départ que le rôle

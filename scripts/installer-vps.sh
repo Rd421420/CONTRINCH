@@ -240,6 +240,12 @@ Il reste, dans l'ordre :
        export N8N_URL=https://ton-n8n.fr N8N_API_KEY=...
        node scripts/importer-workflows.js
 
+  1 bis. Si l'installation vient de tourner en mode SOCKET=1, tout
+     appartient au compte postgres et le rôle de n8n n'a aucun droit :
+
+       sudo -u postgres psql -c "CREATE ROLE era LOGIN PASSWORD 'ÀChanger';"
+       ./scripts/attribuer-role.sh $BASE era
+
   2. Rattacher les identifiants dans n8n
        Postgres, Twilio, Telegram, Google Agenda, Gmail, SMTP
 
