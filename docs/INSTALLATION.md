@@ -35,6 +35,24 @@ l'environnement Node (il faut la version 20 au minimum).
 
 ## Étape 1 — La base de données
 
+### La voie courte
+
+Un script enchaîne les étapes 1 à 3 et le contrôle, avec une vérification
+après chaque geste. Idempotent : relancé, il ne recrée rien.
+
+```bash
+BASE=verif_loc ./scripts/installer-vps.sh --essai   # montre sans rien faire
+BASE=verif_loc ./scripts/installer-vps.sh
+```
+
+Il s'arrête net si les tests ne passent pas — inutile d'installer un socle
+cassé. `SANS_CRON=1` saute l'ajout à la crontab si tu préfères la gérer
+toi-même.
+
+Le détail de ce qu'il fait, pour le faire à la main :
+
+### Le détail
+
 Trois fichiers, **dans cet ordre**. Le second et le troisième dépendent du
 premier.
 

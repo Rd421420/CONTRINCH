@@ -9,7 +9,7 @@
     "node": ">=20"
   },
   "scripts": {
-    "test": "node --test test/",
+    "test": "node --test test/*.test.js",
     "jours-feries": "node scripts/charger-jours-feries.js",
     "n8n:build": "node n8n/build.js",
     "n8n:verifier": "node n8n/build.js --verifier",
