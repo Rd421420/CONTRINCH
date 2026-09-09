@@ -580,7 +580,7 @@ statut est `nouveau` ou `en_cours` :
 ```sql
 SELECT id, nom, mobile, etape_sms, statut, verdict
 FROM locatif.candidats
-WHERE right(regexp_replace(mobile, '\D', '', 'g'), 9) = '674707110';
+WHERE right(regexp_replace(mobile, '\D', '', 'g'), 9) = '600000000';
 ```
 
 Un SMS venu d'un numéro inconnu te remonte sur Telegram — il n'est jamais

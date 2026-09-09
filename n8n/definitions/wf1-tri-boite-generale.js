@@ -200,7 +200,7 @@ const MAILS = [
   {
     from: { value: [{ address: 'alerte@seloger.com' }] },
     subject: 'Nouveau contact pour votre annonce',
-    text: "Bonjour, je souhaite visiter le bien référence 677. Vous pouvez me joindre au 06 74 70 71 10. Charline Logie",
+    text: "Bonjour, je souhaite visiter le bien référence 677. Vous pouvez me joindre au 06 00 00 00 00. Martine Durand",
   },
   {
     from: { value: [{ address: 'contact@leboncoin.fr' }] },

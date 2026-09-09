@@ -236,9 +236,9 @@ function traiterParLeWorkflow(candidat, texteRecu, { creneauxProposes = [], even
 
 const CANDIDAT = {
   id: 7,
-  nom: 'CHARLINE LOGIE',
-  mobile: '+33674707110',
-  email: 'charline.logie@gmail.com',
+  nom: 'MARTINE DURAND',
+  mobile: '+33600000000',
+  email: 'martine.durand@example.com',
   ref_lot: '677',
   cree_le: T.instant(2026, 9, 7, 10, 0).toISOString(),
   etape_sms: ETAPE.SITUATION,
@@ -257,7 +257,7 @@ test('WF-2 bis : une réponse fait avancer la séquence et met le message suivan
 
   const sms = actions.find((a) => a.__action === 'sms');
   assert.equal(sms.type_message, 'sms1bis_garantie');
-  assert.equal(sms.mobile, '+33674707110');
+  assert.equal(sms.mobile, '+33600000000');
   assert.match(sms.texte, /il me manque la garantie/i);
 });
 
@@ -298,7 +298,7 @@ test('WF-2 bis : un verdict non favorable journalise sans donnée nominative', (
   assert.equal(refus.ref_lot, '677');
   assert.ok(Number.isFinite(refus.ecart_seuil));
   for (const champ of Object.values(refus)) {
-    assert.doesNotMatch(String(champ), /CHARLINE|LOGIE|33674707110|gmail/i);
+    assert.doesNotMatch(String(champ), /MARTINE|DURAND|33600000000|example/i);
   }
 
   const sms = actions.find((a) => a.__action === 'sms');
@@ -316,7 +316,7 @@ test('WF-2 bis : « A » écrit l’événement au format ImmoAgenda', () => {
 
   const agenda = actions.find((a) => a.__action === 'agenda');
   assert.ok(agenda, 'aucun événement à créer');
-  assert.equal(agenda.summary, 'VISITE — CHARLINE LOGIE — SAINT CYPRIEN');
+  assert.equal(agenda.summary, 'VISITE — MARTINE DURAND — SAINT CYPRIEN');
   assert.equal(agenda.location, LOT.adresse);
   assert.match(agenda.description, /── ImmoAgenda \(ne pas modifier cette section\) ──/);
   assert.match(agenda.description, /Référence 677 \(700 € par mois\)/);
@@ -384,7 +384,7 @@ test('WF-2 bis : un SMS d’un numéro inconnu remonte sur Telegram sans écritu
 test('WF-2 ter : la file ne s’écoule que dans la plage 9 h – 19 h', () => {
   const wf = charger('wf2ter-emission-sms.json');
   const jsCode = codeDe(wf, 'Messages à envoyer');
-  const messages = [{ id: 1, candidat_id: 7, mobile: '+33674707110', texte: 'bonjour', type_message: 'sms1' }];
+  const messages = [{ id: 1, candidat_id: 7, mobile: '+33600000000', texte: 'bonjour', type_message: 'sms1' }];
   const entree = [{ json: { jours_feries: ['2026-11-11'], messages } }];
 
   const original = Date;
@@ -472,7 +472,7 @@ test('aucune valeur passée en paramètre SQL ne peut contenir de virgule', () =
   // n8n découpe la liste des paramètres sur les virgules : une valeur qui
   // en contient décale silencieusement tous les paramètres suivants.
   const wf = charger('wf2ter-emission-sms.json');
-  const messages = [{ id: 12, mobile: '+33674707110' }];
+  const messages = [{ id: 12, mobile: '+33600000000' }];
 
   const sortie = executerCode(codeDe(wf, 'Résultat d’envoi'), {
     entree: [{ json: { error: 'Invalid parameter, unreachable carrier, code 21211' } }],
@@ -552,8 +552,8 @@ function arbitragesEnAttente(dossiers, { absence = null, maintenant } = {}) {
 function dossier(extra = {}) {
   return {
     id: 42,
-    nom: 'CHARLINE LOGIE',
-    mobile: '+33674707110',
+    nom: 'MARTINE DURAND',
+    mobile: '+33600000000',
     situation: 'cdi',
     garantie: 'aucune',
     verdict: 'hors_criteres',
@@ -757,7 +757,7 @@ test('WF-2 quater : les propositions périmées sont supprimées, relance ou aba
 
   const contexte = {
     dossiers: [{
-      candidat: { id: 7, mobile: '+33674707110', cree_le: T.instant(2026, 9, 7, 10, 0).toISOString(), nb_relances: 1 },
+      candidat: { id: 7, mobile: '+33600000000', cree_le: T.instant(2026, 9, 7, 10, 0).toISOString(), nb_relances: 1 },
       lot: LOT,
     }],
     jours_feries: [],
@@ -798,7 +798,7 @@ test('WF-1 : en mode test, rien n’est écrit en base', () => {
   const extraits = [{
     json: {
       __test: true, sujet_mail: 'Nouveau contact', source: 'seloger.com',
-      reference: '677', nom: 'CHARLINE LOGIE', mobile: '+33674707110', email: null,
+      reference: '677', nom: 'MARTINE DURAND', mobile: '+33600000000', email: null,
     },
   }];
 

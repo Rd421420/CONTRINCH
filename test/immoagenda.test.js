@@ -9,7 +9,7 @@ const REEL = [
   "Type d'événement: Visite",
   '',
   'Client(s):',
-  '  CHARLINE LOGIE (CHARLINE.LOGIE@GMAIL.COM) 0674707110',
+  '  MARTINE DURAND (MARTINE.DURAND@EXAMPLE.COM) 0600000000',
   '',
   'Bien(s):',
   '',
@@ -28,9 +28,9 @@ test('le séparateur est bien U+2500, jamais un tiret ASCII', () => {
 test('un bloc réel se relit intégralement', () => {
   const lu = ia.lireDescription(REEL);
   assert.equal(lu.type, 'Visite');
-  assert.equal(lu.client.nom, 'CHARLINE LOGIE');
-  assert.equal(lu.client.email, 'CHARLINE.LOGIE@GMAIL.COM');
-  assert.equal(lu.client.telephone, '0674707110');
+  assert.equal(lu.client.nom, 'MARTINE DURAND');
+  assert.equal(lu.client.email, 'MARTINE.DURAND@EXAMPLE.COM');
+  assert.equal(lu.client.telephone, '0600000000');
   assert.equal(lu.lot.reference, '677');
   assert.equal(lu.lot.loyer_cc, 508);
   assert.equal(lu.lot.commune, 'SAINT CYPRIEN');
@@ -39,7 +39,7 @@ test('un bloc réel se relit intégralement', () => {
 test('aller-retour : ce que le générateur écrit, le lecteur le relit', () => {
   const description = ia.construireDescription({
     type: 'Visite',
-    client: { nom: 'CHARLINE LOGIE', email: 'CHARLINE.LOGIE@GMAIL.COM', telephone: '0674707110' },
+    client: { nom: 'MARTINE DURAND', email: 'MARTINE.DURAND@EXAMPLE.COM', telephone: '0600000000' },
     lot: {
       reference: '677',
       loyer_cc: 508,
@@ -50,7 +50,7 @@ test('aller-retour : ce que le générateur écrit, le lecteur le relit', () => 
 
   const lu = ia.lireDescription(description);
   assert.equal(lu.type, 'Visite');
-  assert.equal(lu.client.nom, 'CHARLINE LOGIE');
+  assert.equal(lu.client.nom, 'MARTINE DURAND');
   assert.equal(lu.lot.reference, '677');
   assert.equal(lu.lot.loyer_cc, 508);
   assert.equal(lu.lot.commune, 'SAINT CYPRIEN');
@@ -74,10 +74,10 @@ test('les marqueurs des workflows existants sont relus, jamais écrits', () => {
 
 test('le titre porte le préfixe VISITE — et la commune', () => {
   const titre = ia.construireTitre({
-    client: { nom: 'CHARLINE LOGIE' },
+    client: { nom: 'MARTINE DURAND' },
     lot: { adresse: '9 Impasse Jordi Barre 66750 SAINT CYPRIEN' },
   });
-  assert.equal(titre, 'VISITE — CHARLINE LOGIE — SAINT CYPRIEN');
+  assert.equal(titre, 'VISITE — MARTINE DURAND — SAINT CYPRIEN');
 });
 
 test('extraction de la commune et du code postal', () => {

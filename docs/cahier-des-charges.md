@@ -361,7 +361,7 @@ Les rendez-vous créés par le système s'écrivent **exactement** comme ceux po
 Type d'événement: Visite
 
 Client(s):
-  CHARLINE LOGIE (CHARLINE.LOGIE@GMAIL.COM) 0674707110
+  MARTINE DURAND (MARTINE.DURAND@EXAMPLE.COM) 0600000000
 
 Bien(s):
 
