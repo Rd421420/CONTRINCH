@@ -76,6 +76,12 @@ VPS, et il contient nom, revenus et situation professionnelle du candidat.
 
 ## Mise en route
 
+**[`docs/INSTALLATION.md`](docs/INSTALLATION.md) déroule la procédure complète,
+étape par étape** — base, identifiants n8n, import des workflows, essais à
+blanc, puis mise en service en deux temps. Compter une demi-journée.
+
+Le résumé :
+
 ```bash
 # 1. Schéma, dans cet ordre
 psql -d era_loyers -f db/schema.sql
