@@ -1,0 +1,772 @@
+{
+  "name": "BNI - Prospection visiteurs (métiers manquants)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 9 * * 4"
+            }
+          ]
+        }
+      },
+      "id": "a2a55edc-3306-4188-9906-40d4f3c9d2b6",
+      "name": "Chaque jeudi 9h",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "ff2fed44-0bc5-463e-b335-c0431936333d",
+      "name": "Lancement manuel (test)",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// =====================================================================\n//  PARAMÈTRES À ADAPTER — c'est le seul endroit à modifier\n// =====================================================================\nconst config = {\n  // true  = TOUS les emails partent vers email_test (aucun prospect contacté)\n  // false = envoi réel aux prospects\n  mode_test: true,\n  email_test: 'votre.adresse@exemple.fr',\n\n  // Google Sheet de suivi (l'ID est dans l'URL : docs.google.com/spreadsheets/d/<ID>/edit)\n  google_sheet_id: 'REMPLACER_PAR_ID_DU_GOOGLE_SHEET',\n\n  // Expéditeur / signature\n  expediteur_email: 'votre.adresse@exemple.fr',\n  expediteur_nom: 'Prénom NOM',\n  expediteur_activite: 'Votre métier — Votre entreprise',\n  expediteur_telephone: '06 00 00 00 00',\n\n  // Réunion\n  nom_groupe: 'BNI Tout Business',\n  lieu_reunion: 'Palais des Congrès de Perpignan',\n  heure_reunion: '7h00',\n\n  // Zone de recherche\n  ville: 'Perpignan',\n  centre_lat: 42.6986,\n  centre_lng: 2.8954,\n  rayon_km: 10,\n\n  // Volumes\n  max_emails_par_semaine: 10,   // emails envoyés au maximum par exécution\n  max_metiers_par_semaine: 5,   // métiers recherchés par exécution (rotation)\n  candidats_par_metier: 4,      // entreprises analysées par métier\n\n  // Ciblage TPE / micro-entreprises\n  max_avis_google: 150,         // au-delà : probablement une grosse structure / chaîne\n  tranches_effectif_ok: ['NN', '00', '01', '02', '03'], // 0 à 9 salariés (codes INSEE)\n  garder_si_effectif_inconnu: true,\n};\n\n// Date de la prochaine réunion (prochain mercredi)\nconst d = new Date();\nconst delta = ((3 - d.getDay() + 7) % 7) || 7;\nd.setDate(d.getDate() + delta);\nconfig.date_reunion = d.toLocaleDateString('fr-FR', {\n  weekday: 'long', day: 'numeric', month: 'long', timeZone: 'Europe/Paris',\n});\nconfig.aujourdhui = new Date().toISOString().slice(0, 10);\n\nreturn [{ json: config }];\n"
+      },
+      "id": "f594635e-13d1-44ec-a2cf-1035e6c291f5",
+      "name": "Config",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        240,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "read",
+        "documentId": {
+          "__rl": true,
+          "value": "={{ $('Config').first().json.google_sheet_id }}",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Prospects",
+          "mode": "name"
+        },
+        "options": {}
+      },
+      "id": "2747f045-1c85-4380-a67f-6edf276f355d",
+      "name": "Lire Prospects",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        480,
+        100
+      ],
+      "alwaysOutputData": true,
+      "executeOnce": true
+    },
+    {
+      "parameters": {
+        "operation": "read",
+        "documentId": {
+          "__rl": true,
+          "value": "={{ $('Config').first().json.google_sheet_id }}",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Metiers",
+          "mode": "name"
+        },
+        "options": {}
+      },
+      "id": "a1136b7a-70ce-474a-abcd-26101ab6e5a5",
+      "name": "Lire Métiers",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        720,
+        100
+      ],
+      "executeOnce": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// Métiers non représentés dans le groupe, les moins récemment recherchés en premier\nconst cfg = $('Config').first().json;\nconst norm = (s) => String(s ?? '').trim().toUpperCase();\n\nconst aChercher = $input.all()\n  .map((i) => i.json)\n  .filter((r) => r.metier && norm(r.statut) === 'A_RECHERCHER');\n\naChercher.sort((a, b) =>\n  String(a.derniere_recherche ?? '').localeCompare(String(b.derniere_recherche ?? '')));\n\nreturn aChercher.slice(0, cfg.max_metiers_par_semaine).map((r) => ({\n  json: {\n    metier: String(r.metier).trim(),\n    requete: String(r.requete_maps || r.metier).trim(),\n  },\n}));\n"
+      },
+      "id": "506b9c2d-80ef-4193-87f4-e5de1c2362ee",
+      "name": "Choisir les métiers",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        960,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const cfg = $('Config').first().json;\nreturn $input.all().map((i) => ({\n  json: { metier: i.json.metier, derniere_recherche: cfg.aujourdhui },\n}));\n"
+      },
+      "id": "b716d84a-aecf-4551-b60c-8eb54d082126",
+      "name": "Dater les métiers",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1200,
+        -120
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "value": "={{ $('Config').first().json.google_sheet_id }}",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Metiers",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {},
+          "matchingColumns": [
+            "metier"
+          ],
+          "schema": []
+        },
+        "options": {
+          "cellFormat": "RAW"
+        }
+      },
+      "id": "10c41539-8bd0-4bf0-9910-207012098266",
+      "name": "MAJ date métiers",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        1440,
+        -120
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://places.googleapis.com/v1/places:searchText",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Goog-FieldMask",
+              "value": "places.id,places.displayName,places.formattedAddress,places.location,places.websiteUri,places.nationalPhoneNumber,places.rating,places.userRatingCount,places.businessStatus,places.googleMapsUri"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({\n  textQuery: $json.requete + ' ' + $('Config').first().json.ville,\n  languageCode: 'fr',\n  regionCode: 'FR',\n  pageSize: 20,\n  locationBias: { circle: {\n    center: { latitude: $('Config').first().json.centre_lat, longitude: $('Config').first().json.centre_lng },\n    radius: $('Config').first().json.rayon_km * 1000\n  } }\n}) }}",
+        "options": {}
+      },
+      "id": "97f6bb68-a74e-41be-9197-5981be2a42bc",
+      "name": "Google Maps (Places API)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1200,
+        100
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Aplatit les résultats Maps, filtre (distance, taille, doublons) et limite par métier\nconst cfg = $('Config').first().json;\nconst metiers = $('Choisir les métiers').all();\nconst reponses = $input.all();\n\nconst DOMAINES_GENERIQUES = ['facebook.com', 'instagram.com', 'linktr.ee', 'google.com',\n  'business.site', 'pagesjaunes.fr', 'linkedin.com', 'wixsite.com', 'jimdosite.com'];\nconst tel = (s) => String(s ?? '').replace(/\\D/g, '').replace(/^33/, '0');\nconst domaine = (u) => {\n  try { return new URL(u).hostname.replace(/^www\\./, '').toLowerCase(); } catch (e) { return ''; }\n};\nconst generique = (d) => DOMAINES_GENERIQUES.some((g) => d === g || d.endsWith('.' + g));\nconst distanceKm = (lat1, lng1, lat2, lng2) => {\n  const r = (x) => (x * Math.PI) / 180;\n  const a = Math.sin(r(lat2 - lat1) / 2) ** 2 +\n    Math.cos(r(lat1)) * Math.cos(r(lat2)) * Math.sin(r(lng2 - lng1) / 2) ** 2;\n  return 6371 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));\n};\n\n// Déjà contactés (les lignes TEST ne comptent pas)\nconst vus = { place: new Set(), tel: new Set(), dom: new Set() };\nfor (const i of $('Lire Prospects').all()) {\n  const r = i.json;\n  if (String(r.statut ?? '').toUpperCase() === 'TEST') continue;\n  if (r.place_id) vus.place.add(String(r.place_id));\n  if (tel(r.telephone)) vus.tel.add(tel(r.telephone));\n  const d = domaine(r.site_web);\n  if (d && !generique(d)) vus.dom.add(d);\n}\n\nconst out = [];\nreponses.forEach((rep, idx) => {\n  const metier = metiers[idx]?.json.metier;\n  let gardes = 0;\n  for (const p of rep.json.places ?? []) {\n    if (gardes >= cfg.candidats_par_metier) break;\n    if (p.businessStatus && p.businessStatus !== 'OPERATIONAL') continue;\n    if ((p.userRatingCount ?? 0) > cfg.max_avis_google) continue;\n    if (!p.websiteUri && !p.nationalPhoneNumber) continue;\n\n    const dist = p.location\n      ? distanceKm(cfg.centre_lat, cfg.centre_lng, p.location.latitude, p.location.longitude)\n      : 999;\n    if (dist > cfg.rayon_km) continue;\n\n    const t = tel(p.nationalPhoneNumber);\n    const d = domaine(p.websiteUri);\n    if (vus.place.has(p.id) || (t && vus.tel.has(t)) || (d && !generique(d) && vus.dom.has(d))) continue;\n    vus.place.add(p.id);\n    if (t) vus.tel.add(t);\n    if (d && !generique(d)) vus.dom.add(d);\n\n    let urlMentions = '';\n    try { if (p.websiteUri && !generique(d)) urlMentions = new URL(p.websiteUri).origin + '/mentions-legales'; } catch (e) {}\n\n    out.push({ json: {\n      metier,\n      entreprise: p.displayName?.text ?? '',\n      adresse: p.formattedAddress ?? '',\n      code_postal: (String(p.formattedAddress ?? '').match(/\\b(\\d{5})\\b/) || [])[1] ?? '',\n      telephone: p.nationalPhoneNumber ?? '',\n      site_web: p.websiteUri ?? '',\n      site_exploitable: Boolean(p.websiteUri) && !generique(d),\n      url_mentions: urlMentions,\n      distance_km: Math.round(dist * 10) / 10,\n      note_google: p.rating ?? '',\n      nb_avis: p.userRatingCount ?? 0,\n      place_id: p.id,\n      lien_maps: p.googleMapsUri ?? '',\n    } });\n    gardes++;\n  }\n});\nreturn out;\n"
+      },
+      "id": "fba5fd69-0a21-49ad-bdfb-68f0ab8462a3",
+      "name": "Filtrer candidats",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1440,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.site_exploitable ? $json.site_web : 'http://invalid.invalid' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "User-Agent",
+              "value": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0 Safari/537.36"
+            }
+          ]
+        },
+        "options": {
+          "allowUnauthorizedCerts": true,
+          "redirect": {
+            "redirect": {
+              "followRedirects": true,
+              "maxRedirects": 5
+            }
+          },
+          "response": {
+            "response": {
+              "responseFormat": "text",
+              "outputPropertyName": "data"
+            }
+          },
+          "timeout": 10000
+        }
+      },
+      "id": "86290ff8-7286-4eec-9eed-d2f2160f0971",
+      "name": "Site - accueil",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1680,
+        100
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "url": "={{ $('Filtrer candidats').item.json.url_mentions || 'http://invalid.invalid' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "User-Agent",
+              "value": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0 Safari/537.36"
+            }
+          ]
+        },
+        "options": {
+          "allowUnauthorizedCerts": true,
+          "redirect": {
+            "redirect": {
+              "followRedirects": true,
+              "maxRedirects": 5
+            }
+          },
+          "response": {
+            "response": {
+              "responseFormat": "text",
+              "outputPropertyName": "data"
+            }
+          },
+          "timeout": 10000
+        }
+      },
+      "id": "5fbfca42-e645-409b-ad52-69cc0247087d",
+      "name": "Site - mentions légales",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1920,
+        100
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extrait le meilleur email trouvé sur la page d'accueil + mentions légales\nconst cands = $('Filtrer candidats').all();\nconst accueil = $('Site - accueil').all();\nconst mentions = $input.all();\n\nconst dejaContactes = new Set(\n  $('Lire Prospects').all()\n    .filter((i) => String(i.json.statut ?? '').toUpperCase() !== 'TEST')\n    .map((i) => String(i.json.email ?? '').toLowerCase().trim())\n    .filter(Boolean),\n);\n\nconst BLOQUES = /(example\\.|exemple\\.|sentry|wixpress|domain\\.|email\\.com|votre|your|nom@|name@|test@|noreply|no-reply|ne-pas-repondre|\\.(png|jpe?g|gif|webp|svg|css|js)$)/i;\nconst HEBERGEURS = ['ovh.com', 'ovh.net', 'ovhcloud.com', 'o2switch.fr', 'ionos.fr', 'ionos.com', '1and1.fr',\n  'hostinger.com', 'gandi.net', 'wix.com', 'squarespace.com', 'google.com', 'amazon.com',\n  'cloudflare.com', 'planethoster.info', 'lws.fr', 'infomaniak.com', 'shopify.com', 'cnil.fr',\n  'jimdo.com', 'godaddy.com', 'webflow.com'];\nconst PERSO = ['gmail.com', 'orange.fr', 'wanadoo.fr', 'free.fr', 'hotmail.fr', 'hotmail.com',\n  'outlook.fr', 'outlook.com', 'sfr.fr', 'laposte.net', 'yahoo.fr', 'icloud.com', 'live.fr'];\n\nconst texte = (it) => (typeof it?.json?.data === 'string' ? it.json.data : '');\nconst nettoie = (s) => s\n  .replace(/&#64;|&#x40;|\\s*\\[\\s*at\\s*\\]\\s*|\\s*\\(\\s*at\\s*\\)\\s*|%40/gi, '@')\n  .replace(/\\s*\\[\\s*(dot|point)\\s*\\]\\s*|\\s*\\(\\s*(dot|point)\\s*\\)\\s*/gi, '.');\nconst domaine = (u) => {\n  try { return new URL(u).hostname.replace(/^www\\./, '').toLowerCase(); } catch (e) { return ''; }\n};\n\nreturn cands.map((c, i) => {\n  const html = nettoie(texte(accueil[i]) + ' ' + texte(mentions[i]));\n  const trouves = [...new Set((html.match(/[a-z0-9._%+-]+@[a-z0-9.-]+\\.[a-z]{2,}/gi) ?? [])\n    .map((e) => e.toLowerCase().replace(/^u003e/, '')))]\n    .filter((e) => !BLOQUES.test(e))\n    .filter((e) => !HEBERGEURS.some((h) => e.endsWith('@' + h) || e.endsWith('.' + h)));\n\n  const dom = domaine(c.json.site_web);\n  const score = (e) => {\n    const d = e.split('@')[1];\n    let s = 0;\n    if (dom && (d === dom || d.endsWith('.' + dom))) s += 10;\n    else if (PERSO.includes(d)) s += 5;\n    if (/^(contact|info|bonjour|hello)@/.test(e)) s += 2;\n    return s;\n  };\n  trouves.sort((a, b) => score(b) - score(a));\n\n  const email = trouves.find((e) => !dejaContactes.has(e)) ?? '';\n  const deja = !email && trouves.length > 0;\n  return { json: { ...c.json, email, email_deja_contacte: deja } };\n}).filter((i) => !i.json.email_deja_contacte);\n"
+      },
+      "id": "b65c954e-156e-4814-a68d-e2c09c9e84a8",
+      "name": "Extraire email",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2160,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://recherche-entreprises.api.gouv.fr/search",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "q",
+              "value": "={{ $json.entreprise }}"
+            },
+            {
+              "name": "code_postal",
+              "value": "={{ $json.code_postal }}"
+            },
+            {
+              "name": "per_page",
+              "value": "1"
+            }
+          ]
+        },
+        "options": {
+          "batching": {
+            "batch": {
+              "batchSize": 5,
+              "batchInterval": 1200
+            }
+          },
+          "timeout": 15000
+        }
+      },
+      "id": "5ca15105-d313-42b2-b8cd-93f842b57d6b",
+      "name": "Annuaire Entreprises (dirigeant)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2400,
+        100
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Ajoute le représentant légal (API Recherche d'entreprises), filtre les TPE,\n// puis répartit : 'email' (max N, réparti entre métiers) ou 'appel' (pas d'email trouvé)\nconst cfg = $('Config').first().json;\nconst base = $('Extraire email').all();\nconst reps = $input.all();\n\nconst capitalise = (s) => String(s ?? '').toLowerCase()\n  .replace(/(^|[\\s'-])(\\p{L})/gu, (m, sep, l) => sep + l.toUpperCase());\n\nconst enrichis = [];\nbase.forEach((b, i) => {\n  const r = reps[i]?.json?.results?.[0];\n  let dirigeant = '', qualite = '', siren = '', effectif = '', nom_legal = '';\n  if (r) {\n    if (r.etat_administratif === 'C') return;                       // entreprise cessée\n    if (['GE', 'ETI'].includes(r.categorie_entreprise)) return;      // trop grosse\n    siren = r.siren ?? '';\n    effectif = r.tranche_effectif_salarie ?? '';\n    nom_legal = r.nom_complet ?? '';\n    const pp = (r.dirigeants ?? []).find((x) => x.type_dirigeant === 'personne physique');\n    if (pp) {\n      const prenom = String(pp.prenoms ?? '').split(/[\\s,]+/)[0];\n      dirigeant = [capitalise(prenom), String(pp.nom ?? '').toUpperCase()].filter(Boolean).join(' ');\n      qualite = pp.qualite ?? '';\n    } else if (r.nature_juridique === '1000') {                       // entrepreneur individuel\n      dirigeant = capitalise(nom_legal.split('(')[0].trim());\n      qualite = 'Entrepreneur individuel';\n    }\n  }\n  if (effectif && !cfg.tranches_effectif_ok.includes(effectif)) return;\n  if (!effectif && !cfg.garder_si_effectif_inconnu) return;\n  enrichis.push({ ...b.json, dirigeant, qualite_dirigeant: qualite, siren, effectif, nom_legal });\n});\n\n// Répartition équitable entre métiers (round-robin) dans la limite hebdo\nconst parMetier = {};\nfor (const e of enrichis.filter((e) => e.email)) (parMetier[e.metier] ??= []).push(e);\nconst files = Object.values(parMetier);\nconst emails = [];\nwhile (emails.length < cfg.max_emails_par_semaine && files.some((f) => f.length)) {\n  for (const f of files) {\n    if (f.length && emails.length < cfg.max_emails_par_semaine) emails.push(f.shift());\n  }\n}\n\nconst appels = enrichis.filter((e) => !e.email && e.telephone);\nreturn [\n  ...emails.map((e) => ({ json: { ...e, canal: 'email' } })),\n  ...appels.map((e) => ({ json: { ...e, canal: 'appel' } })),\n];\n"
+      },
+      "id": "33495576-99fe-442d-9122-2bf12428e782",
+      "name": "Sélection finale",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2640,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "f3b7677d-8c90-4504-8fd6-74601201ce75",
+              "leftValue": "={{ $json.canal }}",
+              "rightValue": "email",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "5a806fe8-a664-4b19-bf96-f9df8aa92a77",
+      "name": "Email trouvé ?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        2880,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Construit la requête Claude pour chaque prospect\nconst cfg = $('Config').first().json;\n\nconst system = `Tu rédiges, au nom de ${cfg.expediteur_nom} (${cfg.expediteur_activite}), membre du club d'affaires ${cfg.nom_groupe} à ${cfg.ville}, un email court d'invitation adressé au dirigeant d'une petite entreprise locale.\n\nObjectif : l'inviter à venir découvrir le groupe en tant que visiteur lors d'une réunion, sans engagement.\n\nFaits à utiliser (n'invente rien d'autre) :\n- Le groupe se réunit chaque mercredi à ${cfg.heure_reunion} au ${cfg.lieu_reunion}, autour d'un petit-déjeuner.\n- Prochaine réunion : ${cfg.date_reunion}.\n- Le principe BNI : des entrepreneurs locaux qui se recommandent mutuellement des affaires ; une seule personne par métier dans le groupe.\n- Le métier du destinataire n'est pas encore représenté dans le groupe : c'est précisément pour cela qu'on le contacte.\n\nConsignes :\n- Français, vouvoiement, ton chaleureux, direct et professionnel ; pas de superlatifs ni de formules commerciales creuses.\n- 90 à 150 mots, 3 ou 4 courts paragraphes séparés par une ligne vide, texte brut (pas de markdown, pas de liste).\n- Commence par \"Bonjour\" suivi du prénom et du nom du dirigeant s'il est connu, sinon \"Bonjour,\".\n- Mentionne le nom de l'entreprise et son métier de façon naturelle ; tu peux évoquer un élément concret fourni (note Google, quartier/commune) s'il est pertinent.\n- Termine par une invitation claire : répondre à cet email ou appeler pour réserver sa place de visiteur.\n- N'écris PAS de signature ni de formule de fin avec un nom : elle est ajoutée automatiquement. Une formule comme \"Au plaisir de vous y accueillir,\" en dernière ligne est permise.\n- Objet : court (moins de 70 caractères), personnalisé, sans majuscules abusives ni emoji.`;\n\nreturn $input.all().map((i) => {\n  const p = i.json;\n  const fiche = {\n    entreprise: p.entreprise,\n    metier: p.metier,\n    dirigeant: p.dirigeant || null,\n    commune: (String(p.adresse).match(/\\d{5}\\s+([^,]+)/) || [])[1] || cfg.ville,\n    note_google: p.note_google || null,\n    nb_avis_google: p.nb_avis || null,\n  };\n  const claude_body = {\n    model: 'claude-opus-5-5',\n    max_tokens: 4000,\n    output_config: {\n      effort: 'low',\n      format: {\n        type: 'json_schema',\n        schema: {\n          type: 'object',\n          properties: { objet: { type: 'string' }, corps: { type: 'string' } },\n          required: ['objet', 'corps'],\n          additionalProperties: false,\n        },\n      },\n    },\n    fallbacks: 'default',\n    system,\n    messages: [{ role: 'user', content: 'Rédige l\\'email pour ce prospect :\\n' + JSON.stringify(fiche, null, 2) }],\n  };\n  return { json: { ...p, claude_body } };\n});\n"
+      },
+      "id": "40d07717-9135-4bd2-8204-878167da919d",
+      "name": "Préparer prompt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3120,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "anthropic-version",
+              "value": "2023-06-01"
+            },
+            {
+              "name": "anthropic-beta",
+              "value": "server-side-fallback-2026-07-01"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.claude_body) }}",
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "id": "d8050a1f-3a0b-44e8-9450-a38ee617dd09",
+      "name": "Claude - rédiger l'email",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3360,
+        0
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Assemble l'email final (texte + HTML + signature + mention de désinscription)\nconst cfg = $('Config').first().json;\nconst prospects = $('Préparer prompt').all();\nconst reponses = $input.all();\n\nconst esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');\n\nreturn prospects.map((p, i) => {\n  const { claude_body, ...prospect } = p.json;\n  const r = reponses[i]?.json ?? {};\n  let mail = null;\n  if (r.stop_reason !== 'refusal') {\n    const txt = (r.content ?? []).filter((b) => b.type === 'text').map((b) => b.text).join('');\n    try { mail = JSON.parse(txt); } catch (e) { mail = null; }\n  }\n  const genere = Boolean(mail?.objet && mail?.corps);\n  if (!genere) {\n    // Modèle de secours si l'IA ne répond pas\n    mail = {\n      objet: `Invitation ${cfg.nom_groupe} — nous cherchons un(e) ${prospect.metier}`,\n      corps: `Bonjour${prospect.dirigeant ? ' ' + prospect.dirigeant : ''},\\n\\n` +\n        `Je fais partie du ${cfg.nom_groupe}, un groupe d'entrepreneurs de ${cfg.ville} qui se recommandent mutuellement des clients. ` +\n        `Chaque métier n'y est représenté qu'une seule fois, et nous n'avons pas encore de ${prospect.metier}.\\n\\n` +\n        `Je serais ravi(e) de vous accueillir en tant que visiteur, sans engagement, lors de notre prochaine réunion : ` +\n        `${cfg.date_reunion} à ${cfg.heure_reunion} au ${cfg.lieu_reunion}, autour d'un petit-déjeuner.\\n\\n` +\n        `Il vous suffit de répondre à cet email ou de m'appeler pour réserver votre place.\\n\\nAu plaisir de vous y accueillir,`,\n    };\n  }\n\n  const signature = `${cfg.expediteur_nom}\\n${cfg.expediteur_activite}\\nMembre du ${cfg.nom_groupe}\\n${cfg.expediteur_telephone}`;\n  const mention = `Vous recevez ce message car votre activité correspond à un métier recherché par notre groupe. ` +\n    `Pour ne plus être contacté(e), répondez simplement « STOP ».`;\n\n  const texte = `${mail.corps.trim()}\\n\\n${signature}\\n\\n--\\n${mention}`;\n  const html =\n    mail.corps.trim().split(/\\n\\s*\\n/).map((para) => `<p>${esc(para).replace(/\\n/g, '<br>')}</p>`).join('') +\n    `<p>${esc(signature).replace(/\\n/g, '<br>')}</p>` +\n    `<p style=\"color:#888;font-size:12px\">${esc(mention)}</p>`;\n\n  return { json: {\n    ...prospect,\n    destinataire: cfg.mode_test ? cfg.email_test : prospect.email,\n    objet_email: cfg.mode_test ? `[TEST → ${prospect.email}] ${mail.objet}` : mail.objet,\n    texte, html,\n    redige_par_ia: genere,\n  } };\n});\n"
+      },
+      "id": "a659466f-da22-4eb6-84c4-89f9ca37deee",
+      "name": "Préparer l'email",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3600,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "fromEmail": "={{ $('Config').first().json.expediteur_nom }} <{{ $('Config').first().json.expediteur_email }}>",
+        "toEmail": "={{ $json.destinataire }}",
+        "subject": "={{ $json.objet_email }}",
+        "emailFormat": "both",
+        "text": "={{ $json.texte }}",
+        "html": "={{ $json.html }}",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "id": "ce3822fb-efed-4251-862b-97a8693a2e2e",
+      "name": "Envoyer l'email (SMTP)",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        3840,
+        0
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const cfg = $('Config').first().json;\nconst emails = $(\"Préparer l'email\").all();\nconst envois = $input.all();\nconst maintenant = new Date().toLocaleString('fr-FR', { timeZone: 'Europe/Paris' });\n\nreturn emails.map((e, i) => {\n  const p = e.json;\n  const erreur = envois[i]?.json?.error;\n  return { json: {\n    date: maintenant,\n    metier: p.metier,\n    entreprise: p.entreprise,\n    dirigeant: p.dirigeant,\n    qualite_dirigeant: p.qualite_dirigeant,\n    email: p.email,\n    telephone: p.telephone,\n    site_web: p.site_web,\n    adresse: p.adresse,\n    distance_km: p.distance_km,\n    note_google: p.note_google,\n    nb_avis: p.nb_avis,\n    siren: p.siren,\n    effectif: p.effectif,\n    place_id: p.place_id,\n    lien_maps: p.lien_maps,\n    objet_email: p.objet_email,\n    statut: erreur ? 'ERREUR_ENVOI' : (cfg.mode_test ? 'TEST' : 'ENVOYE'),\n    commentaire: erreur ? String(erreur.message ?? erreur).slice(0, 200) : (p.redige_par_ia ? '' : 'modèle de secours'),\n  } };\n});\n"
+      },
+      "id": "c6c05610-237f-43d8-8486-386cc7b41fbe",
+      "name": "Ligne de suivi (email)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4080,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const cfg = $('Config').first().json;\nconst maintenant = new Date().toLocaleString('fr-FR', { timeZone: 'Europe/Paris' });\nreturn $input.all().map(({ json: p }) => ({ json: {\n  date: maintenant,\n  metier: p.metier,\n  entreprise: p.entreprise,\n  dirigeant: p.dirigeant,\n  qualite_dirigeant: p.qualite_dirigeant,\n  email: '',\n  telephone: p.telephone,\n  site_web: p.site_web,\n  adresse: p.adresse,\n  distance_km: p.distance_km,\n  note_google: p.note_google,\n  nb_avis: p.nb_avis,\n  siren: p.siren,\n  effectif: p.effectif,\n  place_id: p.place_id,\n  lien_maps: p.lien_maps,\n  objet_email: '',\n  statut: cfg.mode_test ? 'TEST' : 'A_APPELER',\n  commentaire: 'Pas d\\'email trouvé',\n} }));\n"
+      },
+      "id": "3771eb70-36c0-4d50-a4d8-81b8f5e15fad",
+      "name": "Ligne de suivi (à appeler)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3600,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "={{ $('Config').first().json.google_sheet_id }}",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Prospects",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {},
+          "matchingColumns": [],
+          "schema": []
+        },
+        "options": {}
+      },
+      "id": "719fbdf4-eec7-4fc7-828f-9baa745fabec",
+      "name": "Suivi Google Sheet",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        4320,
+        120
+      ]
+    }
+  ],
+  "connections": {
+    "Chaque jeudi 9h": {
+      "main": [
+        [
+          {
+            "node": "Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lancement manuel (test)": {
+      "main": [
+        [
+          {
+            "node": "Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Config": {
+      "main": [
+        [
+          {
+            "node": "Lire Prospects",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lire Prospects": {
+      "main": [
+        [
+          {
+            "node": "Lire Métiers",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lire Métiers": {
+      "main": [
+        [
+          {
+            "node": "Choisir les métiers",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Choisir les métiers": {
+      "main": [
+        [
+          {
+            "node": "Dater les métiers",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Google Maps (Places API)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Dater les métiers": {
+      "main": [
+        [
+          {
+            "node": "MAJ date métiers",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Maps (Places API)": {
+      "main": [
+        [
+          {
+            "node": "Filtrer candidats",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filtrer candidats": {
+      "main": [
+        [
+          {
+            "node": "Site - accueil",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Site - accueil": {
+      "main": [
+        [
+          {
+            "node": "Site - mentions légales",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Site - mentions légales": {
+      "main": [
+        [
+          {
+            "node": "Extraire email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extraire email": {
+      "main": [
+        [
+          {
+            "node": "Annuaire Entreprises (dirigeant)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Annuaire Entreprises (dirigeant)": {
+      "main": [
+        [
+          {
+            "node": "Sélection finale",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sélection finale": {
+      "main": [
+        [
+          {
+            "node": "Email trouvé ?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Email trouvé ?": {
+      "main": [
+        [
+          {
+            "node": "Préparer prompt",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Ligne de suivi (à appeler)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Préparer prompt": {
+      "main": [
+        [
+          {
+            "node": "Claude - rédiger l'email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Claude - rédiger l'email": {
+      "main": [
+        [
+          {
+            "node": "Préparer l'email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Préparer l'email": {
+      "main": [
+        [
+          {
+            "node": "Envoyer l'email (SMTP)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Envoyer l'email (SMTP)": {
+      "main": [
+        [
+          {
+            "node": "Ligne de suivi (email)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ligne de suivi (email)": {
+      "main": [
+        [
+          {
+            "node": "Suivi Google Sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ligne de suivi (à appeler)": {
+      "main": [
+        [
+          {
+            "node": "Suivi Google Sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Europe/Paris"
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": false
+  }
+}
