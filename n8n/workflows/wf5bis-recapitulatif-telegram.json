@@ -1,0 +1,175 @@
+{
+  "name": "ERA · WF-5 bis · Récapitulatif de 18 h",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 18 * * 1-5"
+            }
+          ]
+        }
+      },
+      "id": "9e3193af-28b0-4920-a3cc-f9ed4d2ca17f",
+      "name": "Chaque jour ouvré à 18 h",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -480,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// ─── À RENSEIGNER APRÈS L'IMPORT ────────────────────────────────────\n// Seul node à modifier : tout le reste du workflow lit ces valeurs.\n//\n// Le node est traversant — il recopie ses items d'entrée en y ajoutant\n// les paramètres — pour ne pas écraser les items du déclencheur.\nconst PARAMETRES = {\n  // Numéro long code français acheté chez Twilio, au format E.164.\n  expediteur: '+33600000000',\n\n  // Identifiant de la conversation Telegram — destinataire UNIQUE.\n  // Les conseillers ne reçoivent rien (cahier des charges §6, WF-5 bis).\n  chat_id: '000000000',\n\n  // Agenda principal de Romain — celui qui porte aussi le sport et le BNI.\n  agenda: 'primary',\n\n  // Boîte dédiée au dépôt des pièces, distincte de la boîte générale.\n  mail_pieces: 'pieces@era-dupontromain.fr',\n\n  // Ollama sur le VPS. Ne JAMAIS pointer un modèle « :cloud » ici :\n  // le texte contient nom, revenus et situation d'un candidat.\n  ollama: 'http://127.0.0.1:11434/api/generate',\n  modele: 'qwen2.5:3b-instruct-q4_K_M',\n};\n\nconst entree = $input.all();\nreturn (entree.length ? entree : [{ json: {} }])\n  .map((item) => ({ json: { ...item.json, ...PARAMETRES } }));"
+      },
+      "id": "54c19c8f-377e-42e7-a87f-a60a790d42c4",
+      "name": "Paramètres",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -260,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- Une seule ligne : la liste complète des dossiers en attente\n-- d'arbitrage jamais encore signalés.\nSELECT COALESCE(json_agg(row_to_json(d) ORDER BY d.cree_le), '[]'::json) AS dossiers\nFROM (\n    SELECT c.id, c.nom, c.mobile, c.situation, c.garantie,\n           c.verdict, c.motif, c.revenus_nets, c.cree_le,\n           l.reference, l.commune, l.loyer_cc\n    FROM locatif.candidats c\n    LEFT JOIN locatif.lots l ON l.reference = c.ref_lot\n    WHERE c.statut = 'arbitrage'\n      AND c.notifie_le IS NULL\n) d;",
+        "options": {}
+      },
+      "id": "f78dc758-693c-4639-a237-309afe992032",
+      "name": "Dossiers à arbitrer",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [
+        -40,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const parametres = $('Paramètres').first().json;\nconst dossiers = $input.first().json.dossiers || [];\n\n// Rien à arbitrer : aucun message. Un récapitulatif vide tous les soirs\n// apprend surtout à ne plus lire les récapitulatifs.\nif (!dossiers.length) return [];\n\nconst lignes = dossiers.map((d, i) => [\n  `<b>${i + 1}. ${d.nom || 'Candidat'}</b> — ${d.mobile || '—'}`,\n  `    ${d.reference || '—'} ${d.commune || ''} · ${d.loyer_cc || '?'} € CC`,\n  `    ${d.situation || 'situation inconnue'} · garantie : ${d.garantie || '—'}`,\n  `    ${d.motif || d.verdict || 'sans motif'}`,\n  `    /pieces ${d.id}`,\n].join('\\n'));\n\nreturn [{\n  json: {\n    chat_id: parametres.chat_id,\n    ids: dossiers.map((d) => d.id).join('|'),\n    texte: [\n      `<b>Arbitrages du jour — ${dossiers.length} dossier(s)</b>`,\n      '',\n      ...lignes,\n    ].join('\\n\\n'),\n  },\n}];"
+      },
+      "id": "043e0941-4606-484b-abca-d5e926aa7323",
+      "name": "Composer le récapitulatif",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        180,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "sendMessage",
+        "chatId": "={{ $json.chat_id }}",
+        "text": "={{ $json.texte }}",
+        "additionalFields": {
+          "appendAttribution": false,
+          "parse_mode": "HTML"
+        }
+      },
+      "id": "d13c2c4f-3c9e-496f-ae25-da70d0271d06",
+      "name": "Envoyer le récapitulatif",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        400,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- Marqué seulement après l'envoi : un échec Telegram doit laisser les\n-- dossiers dans la file, pas les faire disparaître silencieusement.\n--\n-- Les identifiants arrivent séparés par « | » et non par une virgule :\n-- n8n découpe la liste des paramètres sur les virgules, une valeur qui en\n-- contient décalerait tous les paramètres suivants.\nUPDATE locatif.candidats\nSET notifie_le = now()\nWHERE id = ANY (string_to_array($1::text, '|')::bigint[]);",
+        "options": {
+          "queryReplacement": "={{ $('Composer le récapitulatif').first().json.ids }}"
+        }
+      },
+      "id": "0d014fe7-7108-46fd-ad29-14c112532f70",
+      "name": "Marquer comme signalés",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [
+        620,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Chaque jour ouvré à 18 h": {
+      "main": [
+        [
+          {
+            "node": "Paramètres",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Paramètres": {
+      "main": [
+        [
+          {
+            "node": "Dossiers à arbitrer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Dossiers à arbitrer": {
+      "main": [
+        [
+          {
+            "node": "Composer le récapitulatif",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Composer le récapitulatif": {
+      "main": [
+        [
+          {
+            "node": "Envoyer le récapitulatif",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Envoyer le récapitulatif": {
+      "main": [
+        [
+          {
+            "node": "Marquer comme signalés",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "timezone": "Europe/Paris"
+  },
+  "pinData": {},
+  "meta": {
+    "description": "À 18 h les jours ouvrés : un seul message Telegram récapitulant tous les dossiers à arbitrer."
+  },
+  "tags": [
+    {
+      "name": "ERA · pré-étude"
+    }
+  ]
+}
